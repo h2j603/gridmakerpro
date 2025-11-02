@@ -26,7 +26,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 /* --- 레이어 패널 스타일 --- */
 #layer-list { list-style: none; max-height: 250px; overflow-y: auto; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; }
 .layer-item { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #e5e7eb; cursor: pointer; 
-  /* [신규] 모바일 터치 드래그 시 텍스트 선택 방지 */
+  /* [수정] 모바일 터치 드래그 시 텍스트 선택 방지 */
   -webkit-user-select: none;
   user-select: none;
 }
@@ -42,11 +42,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   opacity: 0.5;
   background: #dbeafe; 
 }
+/* [신규] 레이어 드래그 시 자식요소(이름)의 텍스트 선택 방지 */
+.layer-item.dragging .layer-name {
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none; /* 드래그 중에는 이름 편집 상호작용 비활성화 */
+}
+
 
 /* --- 캔버스 및 그리드 스타일 --- */
 .canvas-viewport {
   position: relative;
-  background: whitesmoke;
+  background: whitespoke;
   border-radius: 8px;
   padding: 20px;
   min-height: 600px;
@@ -54,8 +61,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   transform-origin: top center;
   overflow: hidden;
   max-width: 100%;
-  /* [신규] 블렌딩 컨텍스트 격리 */
-  /* isolation: isolate; (JS가 개별 레이어에 적용하는 것이 더 효율적) */
 }
 
 .grid-container {
@@ -66,12 +71,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   bottom: 20px;
   display: grid;
   min-height: 500px;
+  /* [수정] 블렌딩 격리 (JS가 인라인 스타일로 제어) */
 }
 .canvas-viewport.mobile-view .grid-container {
   min-height: auto;
 }
 .grid-container:not(.active-layer) {
   pointer-events: none;
+  /* [수정] JS가 'opacity: 0.4'를 인라인 스타일로 제어 */
 }
 .grid-container.hidden {
   display: none;
@@ -92,7 +99,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .module-delete { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; background: rgba(239, 68, 68, 0.9); color: white; border: none; border-radius: 50%; cursor: pointer; display: none; font-size: 14px; z-index: 10; }
 .active-layer .module:hover .module-delete { display: block; }
 .module-drag-handle { position: absolute; bottom: 4px; right: 4px; width: 24px; height: 24px; background: rgba(0,0,0,0.5); color: white; border-radius: 4px; cursor: move; display: none; justify-content: center; align-items: center; font-size: 16px; line-height: 1; padding-bottom: 2px; z-index: 10; 
-  /* [신규] 모바일 터치 드래그 시 텍스트 선택 방지 */
+  /* [수정] 모바일 터치 드래그 시 텍스트 선택 방지 */
   -webkit-user-select: none;
   user-select: none;
 }
