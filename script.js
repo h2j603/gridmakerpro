@@ -10,7 +10,7 @@ let dimInactiveLayers = true;
 
 // --- [신규] 드래그 상태 변수 ---
 let draggedModuleInfo = null; 
-let draggedLayerId = null; 
+// [삭제] draggedLayerId = null; 
 
 // --- [신규] 히스토리 변수 (레이어 구조 전체 저장) ---
 let history = [];
@@ -19,6 +19,14 @@ let historyIndex = -1;
 // --- [신규] 헬퍼: 깊은 복사 ---
 function deepCopy(obj) {
   return JSON.parse(JSON.stringify(obj));
+}
+
+// --- [신규] 헬퍼: HTML 이스케이프 (XSS 방지) ---
+function escapeHTML(str) {
+  if (str === null || str === undefined) return '';
+  return str.replace(/[&<>"']/g, function(m) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+  });
 }
 
 // --- [신규] 헬퍼: 활성 레이어 가져오기 ---
@@ -42,6 +50,13 @@ function getSelectedModule() {
 // --- [신규] 헬퍼: Clamp ---
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max));
+}
+
+// --- [신규] 헬퍼: 정렬된 레이어 반환 ---
+function getSortedLayers() {
+  // 우선순위 번호(오름차순)에 따라 레이어 정렬
+  // 번호가 낮은 것이 캔버스에서 더 '아래'에 깔림 (먼저 렌더링됨)
+  return [...layers].sort((a, b) => a.priority - b.priority);
 }
 
 // === [신규] 상태 저장 (Undo/Redo) ===
@@ -109,23 +124,22 @@ function renderAll() {
   updateAddModuleHint();
 }
 
-// === [수정] 레이어 패널 렌더링 (드래그 핸들 추가) ===
+// === [수정] 레이어 패널 렌더링 (우선순위 입력 방식) ===
 function renderLayersList() {
   const list = document.getElementById('layer-list');
   if (!list) return;
-  list.innerHTML = layers.map(layer => `
+  
+  // [수정] 정렬된 레이어 순서대로 목록을 그림
+  list.innerHTML = getSortedLayers().map(layer => `
     <li class="layer-item ${layer.id === activeLayerId ? 'active' : ''} ${layer.isLocked ? 'locked' : ''}" 
-        onclick="activateLayer(${layer.id})"
-        data-layer-id="${layer.id}"
-        ondragover="handleLayerDragOver(event)"
-        ondrop="handleLayerDrop(event, ${layer.id})">
+        onclick="activateLayer(${layer.id})">
       
-      <div class="layer-drag-handle"
-           draggable="true"
-           ondragstart="handleLayerDragStart(event, ${layer.id})"
-           ondragend="handleLayerDragEnd(event)"
-           onmousedown="handleLayerDragStart(event, ${layer.id})"
-           ontouchstart="handleLayerTouchStart(event, ${layer.id})">⠿</div>
+      <input 
+        type="number" 
+        class="layer-priority" 
+        value="${layer.priority}" 
+        onclick="event.stopPropagation()" 
+        onchange="updateLayerPriority(event, ${layer.id})">
       
       <button class="layer-btn" onclick="toggleLayerVisibility(event, ${layer.id})">
         ${layer.isVisible ? '👁️' : '🙈'}
@@ -142,7 +156,7 @@ function renderLayersList() {
 }
 
 
-// === [수정] 캔버스 렌더링 (텍스트 스타일 적용) ===
+// === [수정] 캔버스 렌더링 (텍스트/순서 적용) ===
 function renderCanvas() {
   const viewport = document.getElementById('canvas-viewport');
   if (!viewport) return;
@@ -155,7 +169,8 @@ function renderCanvas() {
   const selectedModuleInfo = getSelectedModule();
   const selectedGroupId = (selectedModuleInfo && selectedModuleInfo.module.groupId) ? selectedModuleInfo.module.groupId : null;
 
-  viewport.innerHTML = layers.map(layer => {
+  // [수정] 정렬된 레이어 순서대로 렌더링 (Z-index 결정)
+  viewport.innerHTML = getSortedLayers().map(layer => {
     if (!layer.isVisible) return `<div class="grid-container hidden" id="grid-${layer.id}"></div>`;
     
     const { settings } = layer;
@@ -184,7 +199,6 @@ function renderCanvas() {
       let innerHTML = '';
       const moduleType = moduleData.type || 'box';
 
-      // [신규] 텍스트 스타일 및 모듈 Flex 스타일 생성
       let textStyles = '';
       let moduleFlexStyles = '';
             
@@ -193,15 +207,16 @@ function renderCanvas() {
           text-align: ${moduleData.textAlign || 'left'};
           color: ${moduleData.fontColor || '#000000'};
           font-size: ${moduleData.fontSize ? moduleData.fontSize + 'px' : '14px'};
-          width: 100%; /* Fill flex parent */
-          margin: 0; /* Reset default p margin */
+          width: 100%; 
+          margin: 0; 
         `;
         moduleFlexStyles = `
           display: flex;
           align-items: ${moduleData.verticalAlign || 'flex-start'};
-          padding: 10px; /* Add padding to module */
+          padding: 10px; 
         `;
-        innerHTML = `<p class="module-content" style="${textStyles}">Lorem ipsum...</p>`; 
+        // [수정] 텍스트 내용을 escapeHTML로 안전하게 렌더링
+        innerHTML = `<p class="module-content" style="${textStyles}">${escapeHTML(moduleData.textContent)}</p>`; 
       } 
       else if (moduleType === 'image') { 
         innerHTML = `<img src="https://via.placeholder.com/${desktopColSpan * 100}x${moduleData.row * 50}" alt="placeholder" class="module-content image">`; 
@@ -245,111 +260,54 @@ function renderCanvas() {
   }).join('');
 }
 
-// === [수정] 레이어 드래그 앤 드롭 핸들러 (마우스) ===
-function handleLayerDragStart(event, layerId) {
-    if (event.type === 'mousedown') {
-        event.preventDefault(); 
-    }
-    
-    event.stopPropagation();
-    draggedLayerId = layerId;
-    
-    const layerItem = event.target.closest('.layer-item');
-    if (layerItem) layerItem.classList.add('dragging');
-    
-    if(event.type === 'dragstart' && event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-    }
+// === [삭제] 레이어 드래그 앤 드롭 핸들러 (모두 삭제) ===
+// handleLayerDragStart, handleLayerDragOver, handleLayerDrop, handleLayerDragEnd
+// handleLayerTouchStart, handleDocumentTouchMove, handleDocumentTouchEnd
+
+// === [신규] 레이어 우선순위 관리 함수 ===
+function updateLayerPriority(event, layerId) {
+  event.stopPropagation();
+  const layer = layers.find(l => l.id === layerId);
+  if (!layer) return;
+  
+  // 입력된 값을 우선순위로 설정
+  layer.priority = parseFloat(event.target.value) || 0;
+  
+  // 모든 레이어의 우선순위를 정규화 (0, 1, 2, 3...)
+  normalizeLayerPriorities();
+  
+  saveState();
+  renderLayersList(); // 새 순서(와 새 번호)로 목록 다시 그림
+  renderCanvas();     // 새 Z-index 순서로 캔버스 다시 그림
+  updateCode();
 }
 
-function handleLayerDragOver(event) {
-    event.preventDefault();
-    if(event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'move';
+function normalizeLayerPriorities() {
+  // 현재 설정된 우선순위 값 기준으로 정렬
+  const sorted = [...layers].sort((a, b) => a.priority - b.priority);
+  
+  // 0부터 순서대로 번호(priority)를 다시 매김
+  sorted.forEach((layer, index) => {
+    // 원본 layers 배열에서 해당 객체를 찾아 priority 값을 업데이트
+    const originalLayer = layers.find(l => l.id === layer.id);
+    if (originalLayer) {
+      originalLayer.priority = index;
     }
+  });
 }
 
-function handleLayerDrop(event, targetLayerId) {
-    event.stopPropagation();
-    
-    document.querySelectorAll('.layer-item.dragging').forEach(el => el.classList.remove('dragging'));
-    
-    if (draggedLayerId === null || draggedLayerId === targetLayerId) {
-        draggedLayerId = null;
-        return;
-    }
-
-    const draggedIndex = layers.findIndex(l => l.id === draggedLayerId);
-    const targetIndex = layers.findIndex(l => l.id === targetLayerId);
-
-    if (draggedIndex === -1 || targetIndex === -1) {
-        draggedLayerId = null;
-        return;
-    }
-
-    const [draggedLayer] = layers.splice(draggedIndex, 1);
-    layers.splice(targetIndex, 0, draggedLayer);
-
-    draggedLayerId = null;
-    
-    renderLayersList(); 
-    renderCanvas();     
-    updateCode();
-    saveState();
-}
-
-function handleLayerDragEnd(event) {
-    document.querySelectorAll('.layer-item.dragging').forEach(el => el.classList.remove('dragging'));
-    draggedLayerId = null;
-}
-
-// === [신규] 레이어 터치 드래그 핸들러 (모바일) ===
-function handleLayerTouchStart(event, layerId) {
-    event.stopPropagation();
-    draggedLayerId = layerId;
-    
-    const layerItem = event.target.closest('.layer-item');
-    if (layerItem) layerItem.classList.add('dragging');
-
-    document.addEventListener('touchmove', handleDocumentTouchMove, { passive: false });
-    document.addEventListener('touchend', handleDocumentTouchEnd);
-}
-
-function handleDocumentTouchMove(event) {
-    if (!draggedLayerId && !draggedModuleInfo) return;
-    event.preventDefault(); 
-}
-
-function handleDocumentTouchEnd(event) {
-    if (draggedLayerId) {
-        event.stopPropagation();
-        const touch = event.changedTouches[0];
-        const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
-        const targetLi = targetElement ? targetElement.closest('.layer-item[data-layer-id]') : null;
-
-        if (targetLi) {
-            const targetLayerId = parseInt(targetLi.dataset.layerId);
-            handleLayerDrop(event, targetLayerId); 
-        } else {
-            document.querySelectorAll('.layer-item.dragging').forEach(el => el.classList.remove('dragging'));
-            draggedLayerId = null;
-        }
-    }
-    
-    if (draggedModuleInfo) {
-        handleModuleTouchEnd(event); 
-    }
-
-    document.removeEventListener('touchmove', handleDocumentTouchMove);
-    document.removeEventListener('touchend', handleDocumentTouchEnd);
-}
 
 // === [신규] 레이어 관리 함수 ===
 function addLayer() {
   const newName = `Layer ${layers.length + 1}`;
+  
+  // [신규] 새 레이어는 가장 높은 우선순위 값(가장 위에 보임)을 가짐
+  const newPriority = layers.length > 0 ? Math.max(...layers.map(l => l.priority)) + 1 : 0;
+
   const newLayer = {
     id: Date.now(),
     name: newName,
+    priority: newPriority, // [수정] priority 속성 추가
     modules: [],
     desktopOrder: [],
     mobileOrder: [],
@@ -365,6 +323,9 @@ function addLayer() {
     }
   };
   layers.push(newLayer);
+  // [수정] 정규화 호출 (필요시)
+  // normalizeLayerPriorities(); // 새 레이어는 그냥 맨 뒤에 추가되므로 정규화 불필요
+  
   activateLayer(newLayer.id); 
   showToast(`${newName} 추가됨`);
 }
@@ -381,6 +342,9 @@ function deleteActiveLayer() {
     activeLayerId = layers[layers.length - 1].id;
     selectedModuleId = null;
 
+    // [신규] 레이어 삭제 후 우선순위 정규화
+    normalizeLayerPriorities();
+
     renderAll();
     loadSettingsToUI(getActiveLayer()); 
     updateEditPanel();
@@ -390,8 +354,6 @@ function deleteActiveLayer() {
 }
 
 function activateLayer(layerId) {
-    if (draggedLayerId) return;
-    
     if (activeLayerId === layerId) return; 
     activeLayerId = layerId;
     selectedModuleId = null; 
@@ -471,10 +433,11 @@ function addCustomModule() {
     groupId: null,
     aspectRatio: null,
     // [신규] 텍스트 속성 기본값
+    textContent: 'Lorem ipsum...', // [수정]
     textAlign: 'left',
     verticalAlign: 'flex-start',
     fontColor: '#000000',
-    fontSize: null // null = 기본값 (14px)
+    fontSize: null 
   };
   
   layer.modules.push(newModule);
@@ -497,7 +460,7 @@ function addCustomModule() {
 }
 
 function selectModule(layerId, moduleId) {
-    if (draggedModuleInfo || draggedLayerId) return;
+    if (draggedModuleInfo) return;
     
     if (activeLayerId !== layerId) {
         activateLayer(layerId);
@@ -739,37 +702,47 @@ function handleModuleTouchStart(event, layerId, moduleId, index) {
     document.addEventListener('touchend', handleDocumentTouchEnd);
 }
 
-function handleModuleTouchEnd(event) {
+// [신규] 전역 터치 이동 핸들러 (모듈용)
+function handleDocumentTouchMove(event) {
     if (!draggedModuleInfo) return;
-    event.stopPropagation();
-
-    const touch = event.changedTouches[0];
-    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
-
-    const targetModule = targetElement ? targetElement.closest('.module[data-module-info]') : null;
-    const targetGrid = targetElement ? targetElement.closest('.grid-container[id^="grid-"]') : null;
-
-    let dropped = false;
-    if (targetModule) {
-        const moduleInfo = targetModule.dataset.moduleInfo.split(',').map(Number);
-        const targetLayerId = moduleInfo[0];
-        const targetModuleIndex = moduleInfo[2];
-        
-        handleDrop(event, targetLayerId, targetModuleIndex); 
-        dropped = true;
-    } else if (targetGrid) {
-        const targetLayerId = parseInt(targetGrid.id.split('-')[1]);
-        handleDrop(event, targetLayerId, null); 
-        dropped = true;
-    }
-
-    if (!dropped) {
-        document.querySelectorAll('.module.dragging').forEach(el => el.classList.remove('dragging'));
-        draggedModuleInfo = null;
-    }
+    event.preventDefault(); 
 }
 
-// === [수정] 코드 생성 (폰트 적용 및 텍스트 스타일) ===
+// [신규] 전역 터치 종료 핸들러 (모듈용)
+function handleDocumentTouchEnd(event) {
+    if (draggedModuleInfo) {
+        event.stopPropagation();
+        const touch = event.changedTouches[0];
+        const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+
+        const targetModule = targetElement ? targetElement.closest('.module[data-module-info]') : null;
+        const targetGrid = targetElement ? targetElement.closest('.grid-container[id^="grid-"]') : null;
+
+        let dropped = false;
+        if (targetModule) {
+            const moduleInfo = targetModule.dataset.moduleInfo.split(',').map(Number);
+            const targetLayerId = moduleInfo[0];
+            const targetModuleIndex = moduleInfo[2];
+            
+            handleDrop(event, targetLayerId, targetModuleIndex); 
+            dropped = true;
+        } else if (targetGrid) {
+            const targetLayerId = parseInt(targetGrid.id.split('-')[1]);
+            handleDrop(event, targetLayerId, null); 
+            dropped = true;
+        }
+
+        if (!dropped) {
+            document.querySelectorAll('.module.dragging').forEach(el => el.classList.remove('dragging'));
+            draggedModuleInfo = null;
+        }
+    }
+
+    document.removeEventListener('touchmove', handleDocumentTouchMove);
+    document.removeEventListener('touchend', handleDocumentTouchEnd);
+}
+
+// === [수정] 코드 생성 (폰트 적용 및 텍스트/순서) ===
 
 function generateHTML() {
   let html = `<!DOCTYPE html>
@@ -784,16 +757,22 @@ function generateHTML() {
   <div class="grid-viewport-wrapper">
 `;
 
-  layers.filter(l => l.isVisible).forEach(layer => {
+  // [수정] 정렬된 레이어 순서대로 HTML 생성
+  getSortedLayers().filter(l => l.isVisible).forEach(layer => {
     html += `
     <div class="grid-container" id="grid-layer-${layer.id}">
   ${layer.desktopOrder.map(id => {
       const m = layer.modules.find(mod => mod.id === id);
       if (!m) return '';
       const groupClass = m.groupId ? ` group-${m.groupId}` : '';
-      // [수정] 텍스트 모듈일 경우 <p> 태그 사용
+      
+      // [수정] 텍스트 내용을 escape하여 <p> 태그에 삽입
+      const innerContent = m.type === 'text' 
+        ? `      <p>${escapeHTML(m.textContent)}</p>`
+        : (m.type === 'image' ? '      <img src="https://via.placeholder.com/150" alt="placeholder">' : '      ');
+
       return `    <div class="module module-${m.id} type-${m.type || 'box'}${groupClass}">
-  ${m.type === 'text' ? '      <p>Lorem ipsum...</p>' : (m.type === 'image' ? '      <img src="https://via.placeholder.com/150" alt="placeholder">' : '      ')}
+  ${innerContent}
     </div>`;
     }).join('\n')}
     </div>
@@ -811,9 +790,8 @@ function generateCSS() {
   let css = `body {
   margin: 0;
   background: whitesmoke;
-  /* [신규] 프리텐다드 폰트 적용 (출력용) */
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  padding: ${layers.length > 0 ? layers[0].settings.desktopGap : 10}px;
+  padding: ${layers.length > 0 ? getSortedLayers()[0].settings.desktopGap : 10}px;
 }
 .grid-viewport-wrapper {
   position: relative;
@@ -829,7 +807,7 @@ function generateCSS() {
   pointer-events: none; 
 }
 .grid-container .module {
-  pointer-events: auto; /* 모듈은 클릭 가능하게 */
+  pointer-events: auto; 
 }
 
 .module {
@@ -839,23 +817,25 @@ function generateCSS() {
 .module.type-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .module.type-text { 
   background: #ffffff; 
-  /* [신규] 텍스트 모듈 기본 스타일 (JS가 덮어씀) */
   display: flex;
   padding: 10px;
 }
-/* [신규] 텍스트 모듈 내부 p태그 기본값 */
 .module.type-text p {
   font-size: 14px;
   color: #000;
   width: 100%;
   margin: 0;
+  /* [신규] 텍스트 줄바꿈 적용 (출력용) */
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 `;
 
-  layers.filter(l => l.isVisible).forEach(layer => {
+  // [수정] 정렬된 레이어 순서대로 CSS 생성
+  getSortedLayers().filter(l => l.isVisible).forEach(layer => {
     const { settings } = layer;
     css += `
-/* --- Layer: ${layer.name} (Desktop) --- */
+/* --- Layer: ${layer.name} (Priority ${layer.priority}) --- */
 #grid-layer-${layer.id} {
   grid-template-columns: repeat(${settings.desktopColumns}, 1fr);
   gap: ${settings.desktopGap}px;
@@ -870,7 +850,6 @@ function generateCSS() {
       const bgStyle = (m.type === 'box' || !m.type) ? `background: ${bg};` : '';
       const aspect = m.aspectRatio ? `\n  aspect-ratio: ${m.aspectRatio};` : '';
 
-      // [신규] 텍스트 모듈일 경우 세로 정렬 스타일 추가
       let textModuleStyles = '';
       if (m.type === 'text') {
         textModuleStyles = `
@@ -885,7 +864,6 @@ function generateCSS() {
   ${bgStyle}${outline}${aspect}${textModuleStyles}
 }\n`;
 
-      // [신규] 텍스트 모듈 내부 p 태그 스타일
       if (m.type === 'text') {
         css += `.module-${m.id} p {
   text-align: ${m.textAlign || 'left'};
@@ -905,7 +883,7 @@ function generateCSS() {
   }
 `;
 
-  layers.filter(l => l.isVisible).forEach(layer => {
+  getSortedLayers().filter(l => l.isVisible).forEach(layer => {
     const { settings } = layer;
     css += `
   /* --- Layer: ${layer.name} (Mobile) --- */
@@ -996,7 +974,9 @@ function init() {
   addEditListener('edit-font-color', 'change', 'fontColor', e => e.target.value, true);
   addEditListener('edit-font-size', 'input', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100));
   addEditListener('edit-font-size', 'change', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100), true);
-
+  // [신규] 텍스트 내용 리스너 (실시간/저장 분리)
+  addEditListener('edit-text-content', 'input', 'textContent', e => e.target.value);
+  addEditListener('edit-text-content', 'change', 'textContent', e => e.target.value, true);
   
   addEditListener('edit-col', 'input', 'col', (e, layer) => clamp(parseInt(e.target.value) || 1, 1, layer.settings.desktopColumns));
   addEditListener('edit-col', 'change', 'col', (e, layer) => clamp(parseInt(e.target.value) || 1, 1, layer.settings.desktopColumns), true);
@@ -1051,14 +1031,14 @@ function updateEditPanel() {
   document.getElementById('edit-type').value = module.type || 'box';
   document.getElementById('edit-group-id').value = module.groupId || '';
   
-  // [신규] 텍스트 옵션 패널 UI 업데이트
   const textOptionsPanel = document.getElementById('text-options-panel');
   if (module.type === 'text') {
     textOptionsPanel.style.display = 'block';
     document.getElementById('edit-text-align').value = module.textAlign || 'left';
     document.getElementById('edit-vertical-align').value = module.verticalAlign || 'flex-start';
     document.getElementById('edit-font-color').value = module.fontColor || '#000000';
-    document.getElementById('edit-font-size').value = module.fontSize || ''; // placeholder (기본 14px)
+    document.getElementById('edit-font-size').value = module.fontSize || ''; 
+    document.getElementById('edit-text-content').value = module.textContent; // [신규]
   } else {
     textOptionsPanel.style.display = 'none';
   }
