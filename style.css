@@ -54,7 +54,6 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
   margin: 0;
 }
 
-
 /* --- 캔버스 및 그리드 스타일 --- */
 .canvas-viewport {
   position: relative;
@@ -76,6 +75,7 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
   bottom: 20px;
   display: grid;
   min-height: 500px;
+  grid-auto-flow: dense; /* 추가: 빈 공간 채우기 */
 }
 .canvas-viewport.mobile-view .grid-container {
   min-height: auto;
@@ -88,8 +88,19 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
 }
 
 /* --- 모듈 스타일 --- */
-/* [수정] min-height: 60px 삭제 */
-.module { background: #8c6c3c; border-radius: 0; cursor: pointer; position: relative; border: 2px solid transparent; transition: all 0.2s; overflow: hidden; }
+.module { 
+  background: #8c6c3c; 
+  border-radius: 0; 
+  cursor: pointer; 
+  position: relative; 
+  border: 2px solid transparent; 
+  transition: all 0.2s; 
+  overflow: hidden; 
+  min-height: 60px; /* 기본 최소 높이 */
+}
+.module.has-aspect-ratio {
+  min-height: 0; /* aspect-ratio가 있을 때만 최소 높이 제거 */
+}
 .active-layer .module:hover { border-color: #3b82f6; transform: translateY(-2px); }
 .module.selected { border-color: #ef4444; border-width: 3px; }
 .module.grouped { box-shadow: 0 0 0 2px #a5b4fc inset; }
@@ -102,7 +113,23 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
 .module-warning { position: absolute; top: 4px; right: 28px; background: rgba(245, 158, 11, 0.9); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; z-index: 10; }
 .module-delete { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; background: rgba(239, 68, 68, 0.9); color: white; border: none; border-radius: 50%; cursor: pointer; display: none; font-size: 14px; z-index: 10; }
 .active-layer .module:hover .module-delete { display: block; }
-.module-drag-handle { position: absolute; bottom: 4px; right: 4px; width: 24px; height: 24px; background: rgba(0,0,0,0.5); color: white; border-radius: 4px; cursor: move; display: none; justify-content: center; align-items: center; font-size: 16px; line-height: 1; padding-bottom: 2px; z-index: 10; 
+.module-drag-handle { 
+  position: absolute; 
+  bottom: 4px; 
+  right: 4px; 
+  width: 24px; 
+  height: 24px; 
+  background: rgba(0,0,0,0.5); 
+  color: white; 
+  border-radius: 4px; 
+  cursor: move; 
+  display: none; 
+  justify-content: center; 
+  align-items: center; 
+  font-size: 16px; 
+  line-height: 1; 
+  padding-bottom: 2px; 
+  z-index: 10; 
   -webkit-user-select: none;
   user-select: none;
 }
