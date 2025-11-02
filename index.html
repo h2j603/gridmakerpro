@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=1280, initial-scale=1.0, user-scalable=no">
 <title>Grid Maker (Layers Edition)</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -23,7 +24,7 @@
     <div class="panel">
 
       <div class="control-group" id="layer-panel">
-        <h3>🎨 레이어 (드래그로 순서 변경)</h3>
+        <h3>🎨 레이어 (핸들로 순서 변경)</h3>
         <ul id="layer-list">
           </ul>
         <div class="btn-group" style="margin-top: 12px;">
@@ -85,7 +86,7 @@
           <input type="number" id="custom-col" class="control-input" placeholder="컬럼" min="1" value="2">
           <input type="number" id="custom-row" class="control-input" placeholder="로우" min="1" value="2">
         </div>
-        <label class="control-label" style="margin-top: 8px">배경색 (Box 타입 전용)</label>
+        <label class="control-label" style="margin-top: 8px">배경색</label>
         <input type="color" id="custom-color" class="control-input" value="#8c6c3c" style="height: 40px; cursor: pointer;">
         <div style="display: flex; align-items: center; gap: 5px; margin-top: 5px;">
           <input type="checkbox" id="custom-transparent" onchange="toggleColorPicker('custom', this.checked)">
@@ -117,13 +118,35 @@
         <input type="number" id="edit-mobile-col" class="control-input" min="1" max="12" placeholder="비워두면 자동">
         <div class="hint-text" id="mobile-span-hint">자동: 비율 계산</div>
 
+        <div id="text-options-panel" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
+          <h4 style="font-size: 0.9em; font-weight: 600; margin-bottom: 10px;">🖊️ 텍스트 옵션</h4>
+          <label class="control-label">가로 정렬</label>
+          <select id="edit-text-align" class="control-select" style="margin-bottom: 8px;">
+            <option value="left">왼쪽</option>
+            <option value="center">가운데</option>
+            <option value="right">오른쪽</option>
+          </select>
+          
+          <label class="control-label">세로 정렬 (Align)</label>
+          <select id="edit-vertical-align" class="control-select" style="margin-bottom: 8px;">
+            <option value="flex-start">위</option>
+            <option value="center">중앙</option>
+            <option value="flex-end">아래</option>
+          </select>
+
+          <label class="control-label">폰트 색상</label>
+          <input type="color" id="edit-font-color" class="control-input" style="height: 40px; cursor: pointer; margin-bottom: 8px;">
+          
+          <label class="control-label">폰트 크기 (px)</label>
+          <input type="number" id="edit-font-size" class="control-input" min="8" max="100" placeholder="기본 (14px)">
+        </div>
         <label class="control-label" style="margin-top: 12px;">1:1 비율</label>
         <div style="display: flex; align-items: center; gap: 5px;">
             <input type="checkbox" id="edit-aspect-ratio">
             <label for="edit-aspect-ratio" style="font-size: 0.9em;">aspect-ratio: 1/1</label>
         </div>
 
-        <label class="control-label" style="margin-top: 12px">배경색 (Box 타입 전용)</label>
+        <label class="control-label" style="margin-top: 12px">배경색</label>
         <input type="color" id="edit-color" class="control-input" style="height: 40px; cursor: pointer;">
         <div style="display: flex; align-items: center; gap: 5px; margin-top: 5px;">
           <input type="checkbox" id="edit-transparent" onchange="toggleColorPicker('edit', this.checked)">
