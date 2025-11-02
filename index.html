@@ -26,7 +26,7 @@
       <div class="control-group" id="layer-panel">
         <h3>🎨 레이어 (우선순위로 순서 변경)</h3>
         <ul id="layer-list">
-          </ul>
+        </ul>
         <div class="btn-group" style="margin-top: 12px;">
           <button class="btn btn-secondary" onclick="addLayer()">➕ 새 레이어</button>
           <button class="btn btn-secondary" onclick="deleteActiveLayer()">🗑️ 활성 레이어 삭제</button>
@@ -138,14 +138,27 @@
           <label class="control-label">폰트 크기 (px)</label>
           <input type="number" id="edit-font-size" class="control-input" min="8" max="100" placeholder="기본 (14px)">
           
+          <label class="control-label" style="margin-top: 8px">폰트 굵기</label>
+          <select id="edit-font-weight" class="control-select" style="margin-bottom: 8px;">
+            <option value="100">100 - Thin</option>
+            <option value="200">200 - Extra Light</option>
+            <option value="300">300 - Light</option>
+            <option value="400" selected>400 - Regular</option>
+            <option value="500">500 - Medium</option>
+            <option value="600">600 - Semi Bold</option>
+            <option value="700">700 - Bold</option>
+            <option value="800">800 - Extra Bold</option>
+            <option value="900">900 - Black</option>
+          </select>
+          
           <label class="control-label" style="margin-top: 8px">텍스트 내용</label>
           <textarea id="edit-text-content" class="control-input" rows="3" style="font-family: inherit; white-space: pre-wrap;"></textarea>
         </div>
 
-        <label class="control-label" style="margin-top: 12px;">1:1 비율</label>
+        <label class="control-label" style="margin-top: 12px;">셀 비율 유지</label>
         <div style="display: flex; align-items: center; gap: 5px;">
             <input type="checkbox" id="edit-aspect-ratio">
-            <label for="edit-aspect-ratio" style="font-size: 0.9em;">aspect-ratio: 1/1</label>
+            <label for="edit-aspect-ratio" id="edit-aspect-ratio-label" style="font-size: 0.9em;">정사각형 셀 기준 (2×2)</label>
         </div>
 
         <label class="control-label" style="margin-top: 12px">배경색</label>
@@ -208,7 +221,7 @@
     </div>
 
     <div class="canvas-viewport" id="canvas-viewport" onclick="handleCanvasClick(event)">
-      </div>
+    </div>
 
     <div class="panel">
       <h3>💻 생성된 코드 (모든 레이어)</h3>
