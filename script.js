@@ -1,14 +1,10 @@
 // --- [신규] 글로벌 상태 변수 ---
-let layers = []; // { id, name, modules, desktopOrder, mobileOrder, isVisible, isLocked }
+let layers = []; // { id, name, modules, desktopOrder, mobileOrder, isVisible, isLocked, settings }
 let activeLayerId = null;
 let selectedModuleId = null;
 
-// --- [신규] 글로벌 설정 변수 (모든 레이어 공통) ---
-let desktopColumns = 6, desktopGap = 10;
-let targetColumns = 2, mobileGap = 10;
-let responsiveMode = 'reflow';
+// --- [수정] 글로벌 설정 (공통 뷰 상태) ---
 let currentView = 'desktop', activeTab = 'html';
-let mobileOrderLocked = false;
 let showSelection = true;
 
 // --- [신규] 드래그 상태 변수 ---
@@ -35,22 +31,10 @@ function getSelectedModule() {
   if (!layer || selectedModuleId === null) return null;
   const module = layer.modules.find(m => m.id === selectedModuleId);
   if (!module) {
-    // 모듈을 못찾으면 선택 해제
     selectedModuleId = null;
     return null;
   }
-  return module;
-}
-
-// --- [신규] 헬퍼: ID로 모듈 찾기 (모든 레이어) ---
-function findModuleById(moduleId) {
-    for (const layer of layers) {
-        const module = layer.modules.find(m => m.id === moduleId);
-        if (module) {
-            return { module, layer };
-        }
-    }
-    return null;
+  return { module, layer }; // [수정] 모듈과 레이어를 함께 반환
 }
 
 // --- [신규] 헬퍼: Clamp ---
@@ -63,16 +47,13 @@ function saveState() {
   if (historyIndex < history.length - 1) {
     history.splice(historyIndex + 1);
   }
-  
   const state = {
     layers: deepCopy(layers),
     activeLayerId: activeLayerId,
     selectedModuleId: selectedModuleId
   };
-  
   history.push(state);
   historyIndex = history.length - 1;
-  
   if (history.length > 100) {
     history.shift();
     historyIndex--;
@@ -88,12 +69,12 @@ function loadState(state) {
   activeLayerId = state.activeLayerId;
   selectedModuleId = state.selectedModuleId;
 
-  // 활성 레이어가 삭제된 경우 대비
   if (!getActiveLayer() && layers.length > 0) {
       activeLayerId = layers[layers.length - 1].id;
   }
   
   renderAll(); // 모든 UI 다시 그리기
+  loadSettingsToUI(getActiveLayer()); // [신규] 불러온 활성 레이어의 설정을 UI에 로드
   updateEditPanel();
   updateUndoRedoButtons();
 }
@@ -130,7 +111,7 @@ function renderAll() {
 function renderLayersList() {
   const list = document.getElementById('layer-list');
   if (!list) return;
-  list.innerHTML = layers.map((layer, index) => `
+  list.innerHTML = layers.map(layer => `
     <li class="layer-item ${layer.id === activeLayerId ? 'active' : ''} ${layer.isLocked ? 'locked' : ''}" 
         onclick="activateLayer(${layer.id})">
       <button class="layer-btn" onclick="toggleLayerVisibility(event, ${layer.id})">
@@ -147,30 +128,29 @@ function renderLayersList() {
   `).join('');
 }
 
-// === [신규] 캔버스 (모든 레이어) 렌더링 ===
+// === [수정] 캔버스 렌더링 (레이어별 설정 적용) ===
 function renderCanvas() {
   const viewport = document.getElementById('canvas-viewport');
   if (!viewport) return;
   
-  // 캔버스 배율/뷰 설정
   const scaleValue = parseInt(document.getElementById('canvas-scale').value);
   viewport.style.transform = `scale(${scaleValue / 100})`;
   viewport.classList.toggle('mobile-view', currentView === 'mobile');
   
-  const columns = currentView === 'desktop' ? desktopColumns : targetColumns;
-  const gap = currentView === 'desktop' ? desktopGap : mobileGap;
-  
-  // [신규] 그룹 시각화를 위해 현재 선택된 모듈의 그룹 ID 가져오기
-  const selectedModule = getSelectedModule();
-  const selectedGroupId = (selectedModule && selectedModule.groupId) ? selectedModule.groupId : null;
+  const selectedModuleInfo = getSelectedModule();
+  const selectedGroupId = (selectedModuleInfo && selectedModuleInfo.module.groupId) ? selectedModuleInfo.module.groupId : null;
 
   viewport.innerHTML = layers.map(layer => {
     if (!layer.isVisible) return `<div class="grid-container hidden" id="grid-${layer.id}"></div>`;
     
+    // [수정] 각 레이어의 개별 설정을 읽어옴
+    const { settings } = layer;
+    const columns = currentView === 'desktop' ? settings.desktopColumns : settings.targetColumns;
+    const gap = currentView === 'desktop' ? settings.desktopGap : settings.mobileGap;
+    
     const isActive = layer.id === activeLayerId;
     const isLocked = layer.isLocked;
     
-    // 순서가 적용된 모듈 목록 가져오기
     const order = currentView === 'desktop' ? layer.desktopOrder : layer.mobileOrder;
     const orderedModules = order.map(id => layer.modules.find(m => m.id === id)).filter(m => m);
 
@@ -183,21 +163,19 @@ function renderCanvas() {
       const borderColor = moduleData.borderColor || '#000000';
       const outlineStyle = borderWidth > 0 ? `outline: ${borderWidth}px solid ${borderColor}; outline-offset: -${borderWidth}px;` : '';
       
-      const desktopColSpan = clamp(moduleData.col, 1, desktopColumns);
-      const mobileColSpan = getMobileSpan(moduleData);
+      // [수정] getMobileSpan에 layer를 전달하여 올바른 설정으로 계산
+      const desktopColSpan = clamp(moduleData.col, 1, settings.desktopColumns);
+      const mobileColSpan = getMobileSpan(moduleData, layer);
       const col = currentView === 'desktop' ? desktopColSpan : mobileColSpan;
       
       const showWarning = currentView === 'mobile' && 
-                          moduleData.col > targetColumns && 
+                          moduleData.col > settings.targetColumns && 
                           (moduleData.mobileCol === null || moduleData.mobileCol === undefined || moduleData.mobileCol === '');
       
       let innerHTML = '';
       const moduleType = moduleData.type || 'box';
-      if (moduleType === 'text') {
-          innerHTML = `<p class="module-content">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non risus.</p>`;
-      } else if (moduleType === 'image') {
-          innerHTML = `<img src="https://via.placeholder.com/${desktopColSpan * 100}x${moduleData.row * 50}" alt="placeholder" class="module-content image">`;
-      }
+      if (moduleType === 'text') { innerHTML = `<p class="module-content">Lorem ipsum...</p>`; } 
+      else if (moduleType === 'image') { innerHTML = `<img src="https://via.placeholder.com/${desktopColSpan * 100}x${moduleData.row * 50}" alt="placeholder" class="module-content image">`; }
       
       const selectedClass = (showSelection && isSelected) ? 'selected' : '';
       const groupedClass = (showSelection && selectedGroupId && moduleData.groupId === selectedGroupId && !isSelected) ? 'grouped' : '';
@@ -245,11 +223,18 @@ function addLayer() {
     desktopOrder: [],
     mobileOrder: [],
     isVisible: true,
-    isLocked: false
+    isLocked: false,
+    // [신규] 레이어별 개별 설정
+    settings: {
+      desktopColumns: 6,
+      desktopGap: 10,
+      targetColumns: 2,
+      mobileGap: 10,
+      mobileOrderLocked: false
+    }
   };
   layers.push(newLayer);
-  activateLayer(newLayer.id); // 새 레이어를 활성화
-  saveState();
+  activateLayer(newLayer.id); // 새 레이어를 활성화 (내부에서 saveState 호출)
   showToast(`${newName} 추가됨`);
 }
 
@@ -260,14 +245,13 @@ function deleteActiveLayer() {
   }
   const layer = getActiveLayer();
   if (!layer) return;
-  if (confirm(`'${layer.name}' 레이어를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) { // 참고: undo로 되돌릴 수 있음
+  if (confirm(`'${layer.name}' 레이어를 삭제하시겠습니까?`)) {
     layers = layers.filter(l => l.id !== layer.id);
-    
-    // 다른 레이어 활성화
     activeLayerId = layers[layers.length - 1].id;
     selectedModuleId = null;
 
     renderAll();
+    loadSettingsToUI(getActiveLayer()); // [신규] 새 활성 레이어 설정 로드
     updateEditPanel();
     saveState();
     showToast(`레이어 삭제됨`);
@@ -275,11 +259,16 @@ function deleteActiveLayer() {
 }
 
 function activateLayer(layerId) {
-  if (activeLayerId === layerId) return; // 이미 활성
+  if (activeLayerId === layerId) return; 
   activeLayerId = layerId;
-  selectedModuleId = null; // 레이어 변경 시 선택 해제
+  selectedModuleId = null; 
   
-  // UI 갱신 (히스토리 저장 없음 - 단순 뷰 변경)
+  const newActiveLayer = getActiveLayer();
+  
+  // [신규] UI에 새 활성 레이어의 설정 로드
+  loadSettingsToUI(newActiveLayer);
+  
+  // UI 갱신 (히스토리 저장 없음)
   renderLayersList();
   renderCanvas();
   updateEditPanel();
@@ -293,11 +282,11 @@ function renameLayer(event, layerId) {
   const newName = event.target.textContent.trim();
   if (newName && layer.name !== newName) {
     layer.name = newName;
-    event.target.textContent = newName; // 공백 제거
+    event.target.textContent = newName;
     saveState();
     showToast('레이어 이름 변경됨');
   } else {
-    event.target.textContent = layer.name; // 원래 이름 복구
+    event.target.textContent = layer.name;
   }
 }
 
@@ -309,7 +298,7 @@ function handleLayerRenameKey(event) {
 }
 
 function toggleLayerVisibility(event, layerId) {
-  event.stopPropagation(); // 부모 <li>의 activateLayer 방지
+  event.stopPropagation();
   const layer = layers.find(l => l.id === layerId);
   if (!layer) return;
   layer.isVisible = !layer.isVisible;
@@ -319,7 +308,7 @@ function toggleLayerVisibility(event, layerId) {
 }
 
 function toggleLayerLock(event, layerId) {
-  event.stopPropagation(); // 부모 <li>의 activateLayer 방지
+  event.stopPropagation();
   const layer = layers.find(l => l.id === layerId);
   if (!layer) return;
   layer.isLocked = !layer.isLocked;
@@ -333,16 +322,11 @@ function toggleLayerLock(event, layerId) {
 
 function addCustomModule() {
   const layer = getActiveLayer();
-  if (!layer) {
-    showToast('활성 레이어가 없습니다.');
-    return;
-  }
-  if (layer.isLocked) {
-    showToast('잠긴 레이어에는 추가할 수 없습니다.');
-    return;
-  }
+  if (!layer) { showToast('활성 레이어가 없습니다.'); return; }
+  if (layer.isLocked) { showToast('잠긴 레이어에는 추가할 수 없습니다.'); return; }
 
-  const col = clamp(parseInt(document.getElementById('custom-col').value) || 2, 1, desktopColumns);
+  // [수정] 현재 활성 레이어의 설정을 기준으로 clamp
+  const col = clamp(parseInt(document.getElementById('custom-col').value) || 2, 1, layer.settings.desktopColumns);
   const row = clamp(parseInt(document.getElementById('custom-row').value) || 2, 1, 99);
   const color = document.getElementById('custom-color').value;
   const transparent = document.getElementById('custom-transparent').checked;
@@ -360,13 +344,12 @@ function addCustomModule() {
   
   layer.modules.push(newModule);
   layer.desktopOrder.push(newModule.id);
-  if (mobileOrderLocked) {
+  if (layer.settings.mobileOrderLocked) { // [수정] 레이어별 설정값 사용
     layer.mobileOrder = [...layer.desktopOrder];
   } else {
     layer.mobileOrder.push(newModule.id);
   }
   
-  // 입력 필드 초기화
   document.getElementById('custom-transparent').checked = false;
   toggleColorPicker('custom', false);
   document.getElementById('custom-border-width').value = 0;
@@ -379,17 +362,14 @@ function addCustomModule() {
 }
 
 function selectModule(layerId, moduleId) {
-  // 1. 레이어 활성화 (필요시)
   if (activeLayerId !== layerId) {
       activateLayer(layerId);
   }
-  
-  // 2. 모듈 선택
-  if (selectedModuleId === moduleId) return; // 이미 선택됨
+  if (selectedModuleId === moduleId) return; 
   selectedModuleId = moduleId;
   
   updateEditPanel();
-  renderCanvas(); // 선택 상태(.selected) 갱신
+  renderCanvas();
 }
 
 function deselectModule() {
@@ -426,25 +406,17 @@ function deleteModule(layerId, moduleId, event) {
 }
 
 function deleteSelectedModule() {
-  const layer = getActiveLayer();
-  const module = getSelectedModule();
-  if (!layer || !module) return;
-  
-  // deleteModule 함수 재사용
-  deleteModule(layer.id, module.id, new Event('click'));
+  const moduleInfo = getSelectedModule();
+  if (!moduleInfo) return;
+  deleteModule(moduleInfo.layer.id, moduleInfo.module.id, new Event('click'));
 }
 
 function splitSelectedModule() {
-  const layer = getActiveLayer();
-  const module = getSelectedModule();
-  if (!layer || !module) {
-    showToast('분할할 모듈을 먼저 선택하세요.');
-    return;
-  }
-  if (layer.isLocked) {
-    showToast('잠긴 레이어의 모듈은 분할할 수 없습니다.');
-    return;
-  }
+  const moduleInfo = getSelectedModule();
+  if (!moduleInfo) { showToast('분할할 모듈을 먼저 선택하세요.'); return; }
+
+  const { module, layer } = moduleInfo;
+  if (layer.isLocked) { showToast('잠긴 레이어의 모듈은 분할할 수 없습니다.'); return; }
 
   const h = parseInt(document.getElementById('split-h').value) || 1;
   const v = parseInt(document.getElementById('split-v').value) || 1;
@@ -458,43 +430,27 @@ function splitSelectedModule() {
   const newCol = module.col / h;
   const newRow = module.row / v;
   const newGroupId = 'split-' + Date.now();
-  const totalNewModules = h * v;
   let newModules = [];
   let newModuleIds = [];
 
-  for (let i = 0; i < totalNewModules; i++) {
-    const newModule = {
-      ...deepCopy(module),
-      id: Date.now() + i,
-      col: newCol,
-      row: newRow,
-      groupId: newGroupId,
-    };
-    newModules.push(newModule);
-    newModuleIds.push(newModule.id);
+  for (let i = 0; i < (h * v); i++) {
+    newModules.push({
+      ...deepCopy(module), id: Date.now() + i,
+      col: newCol, row: newRow, groupId: newGroupId,
+    });
+    newModuleIds.push(newModules[i].id);
   }
 
-  // --- 기존 모듈을 새 모듈들로 교체 ---
   const originalIndex = layer.modules.findIndex(m => m.id === module.id);
-  const originalId = module.id;
+  if (originalIndex > -1) { layer.modules.splice(originalIndex, 1, ...newModules); }
+  const desktopOrderIndex = layer.desktopOrder.indexOf(module.id);
+  if (desktopOrderIndex > -1) { layer.desktopOrder.splice(desktopOrderIndex, 1, ...newModuleIds); }
+  const mobileOrderIndex = layer.mobileOrder.indexOf(module.id);
+  if (mobileOrderIndex > -1) { layer.mobileOrder.splice(mobileOrderIndex, 1, ...newModuleIds); }
 
-  if (originalIndex > -1) {
-      layer.modules.splice(originalIndex, 1, ...newModules);
-  }
-
-  const desktopOrderIndex = layer.desktopOrder.indexOf(originalId);
-  if (desktopOrderIndex > -1) {
-    layer.desktopOrder.splice(desktopOrderIndex, 1, ...newModuleIds);
-  }
-
-  const mobileOrderIndex = layer.mobileOrder.indexOf(originalId);
-  if (mobileOrderIndex > -1) {
-    layer.mobileOrder.splice(mobileOrderIndex, 1, ...newModuleIds);
-  }
-
-  selectedModuleId = null; // 분할 후 선택 해제
+  selectedModuleId = null;
   updateEditPanel();
-  showToast(`${module.col}x${module.row} 모듈을 ${h}x${v} (${totalNewModules}개)로 분할했습니다.`);
+  showToast(`${module.col}x${module.row} 모듈을 ${h}x${v}로 분할했습니다.`);
   renderCanvas();
   updateStats();
   updateCode();
@@ -504,10 +460,7 @@ function splitSelectedModule() {
 function clearActiveLayer() {
   const layer = getActiveLayer();
   if (!layer) return;
-  if (layer.isLocked) {
-    showToast('잠긴 레이어는 비울 수 없습니다.');
-    return;
-  }
+  if (layer.isLocked) { showToast('잠긴 레이어는 비울 수 없습니다.'); return; }
   if(confirm(`'${layer.name}' 레이어의 모든 모듈을 삭제하시겠습니까?`)) {
     layer.modules = [];
     layer.desktopOrder = [];
@@ -526,10 +479,7 @@ function clearActiveLayer() {
 
 function handleDragStart(layerId, moduleId, moduleIndexInOrder, event) {
   const layer = layers.find(l => l.id === layerId);
-  if (!layer || layer.isLocked) {
-      event.preventDefault();
-      return;
-  }
+  if (!layer || layer.isLocked) { event.preventDefault(); return; }
   
   draggedModuleInfo = { layerId, moduleId, moduleIndexInOrder };
   event.target.closest('.module').classList.add('dragging');
@@ -576,15 +526,14 @@ function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
       idsToMove.push(draggedId);
   }
 
-  // 드롭 대상이 '캔버스 배경'인 경우 (targetModuleIndexInOrder가 null)
+  // 캔버스 배경 드롭
   if (targetModuleIndexInOrder === null) {
-      // 그룹이 아닌 경우, 마지막으로 드롭
-      if (!groupId) {
+      if (!groupId) { // 그룹이 아닐 때만 마지막으로 이동
           let newOrder = order.filter(id => id !== draggedId);
           newOrder.push(draggedId);
           if (currentView === 'desktop') {
               layer.desktopOrder = newOrder;
-              if (mobileOrderLocked) layer.mobileOrder = [...newOrder];
+              if (layer.settings.mobileOrderLocked) layer.mobileOrder = [...newOrder];
           } else {
               layer.mobileOrder = newOrder;
           }
@@ -595,7 +544,7 @@ function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
       return;
   }
   
-  // 드롭 대상이 '다른 모듈'인 경우
+  // 모듈 위 드롭
   const targetId = order[targetModuleIndexInOrder];
   if (idsToMove.includes(targetId)) {
       draggedModuleInfo = null;
@@ -605,7 +554,6 @@ function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
   let newOrder = order.filter(id => !idsToMove.includes(id));
   let newDropIndex = newOrder.indexOf(targetId);
   
-  // 드래그 방향에 따라 인덱스 보정 (앞 -> 뒤 vs 뒤 -> 앞)
   if (draggedModuleInfo.moduleIndexInOrder < targetModuleIndexInOrder) {
       newDropIndex += 1;
   }
@@ -614,7 +562,7 @@ function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
 
   if (currentView === 'desktop') {
     layer.desktopOrder = newOrder;
-    if (mobileOrderLocked) {
+    if (layer.settings.mobileOrderLocked) {
       layer.mobileOrder = [...layer.desktopOrder];
     }
   } else {
@@ -627,7 +575,7 @@ function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
 }
 
 
-// === [수정] 코드 생성 (모든 레이어) ===
+// === [수정] 코드 생성 (레이어별 설정 적용) ===
 
 function generateHTML() {
   let html = `<!DOCTYPE html>
@@ -667,99 +615,87 @@ function generateCSS() {
   let css = `body {
   margin: 0;
   background: whitesmoke;
-  padding: ${desktopGap}px;
+  /* body padding은 첫 번째 레이어 갭 기준으로 설정 */
+  padding: ${layers.length > 0 ? layers[0].settings.desktopGap : 10}px;
 }
-
-/* [신규] 레이어 중첩 래퍼 */
 .grid-viewport-wrapper {
   position: relative;
-  max-width: ${1280 - (desktopGap * 2)}px; /* 예시 최대 너비 */
+  max-width: 1400px; /* 예시 최대 너비 */
   margin: 0 auto;
 }
-
+/* [수정] 그리드 컨테이너 기본 스타일 */
 .grid-container {
   display: grid;
-  grid-template-columns: repeat(${desktopColumns}, 1fr);
-  gap: ${desktopGap}px;
-}
-
-/* [신규] 레이어 중첩 스타일 */
-.grid-viewport-wrapper .grid-container {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  /* 비활성 레이어 클릭 방지 */
-  pointer-events: none;
+  pointer-events: none; /* 클릭 통과 */
 }
-/* 활성 레이어(가장 위)만 클릭 가능 */
-.grid-viewport-wrapper .grid-container:last-of-type {
-  position: relative; /* 스태킹 컨텍스트에서 높이 차지 */
-  pointer-events: auto;
+.grid-container:last-of-type {
+  position: relative; /* 높이 차지 */
+  pointer-events: auto; /* 클릭 가능 */
 }
-
-
 .module {
   min-height: 60px;
 }
 .module.type-image { background: #e0e0e0; }
 .module.type-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .module.type-text { background: #ffffff; padding: 10px; }
-
-/* [신규] 모든 레이어의 모듈 스타일 생성 */
 `;
 
-  layers.forEach(layer => {
-    if (!layer.isVisible) return;
-    
-    css += `\n/* --- Layer: ${layer.name} --- */\n`;
-    
+  // [수정] 레이어별 데스크톱 스타일 생성
+  layers.filter(l => l.isVisible).forEach(layer => {
+    const { settings } = layer;
+    css += `
+/* --- Layer: ${layer.name} (Desktop) --- */
+#grid-layer-${layer.id} {
+  grid-template-columns: repeat(${settings.desktopColumns}, 1fr);
+  gap: ${settings.desktopGap}px;
+}
+`;
     layer.modules.forEach(m => {
-      const desktopColSpan = clamp(m.col, 1, desktopColumns);
-      const isTransparent = m.transparent || false;
-      const bgColor = isTransparent ? 'transparent' : (m.color || '#8c6c3c');
-      const borderWidth = m.borderWidth || 0;
-      const borderColor = m.borderColor || '#000000';
-      const outlineStyle = borderWidth > 0 ? `\n  outline: ${borderWidth}px solid ${borderColor};\n  outline-offset: -${borderWidth}px;` : '';
-      const backgroundStyle = (m.type === 'box' || !m.type) ? `background: ${bgColor};` : '';
-      const aspectStyle = m.aspectRatio ? `\n  aspect-ratio: ${m.aspectRatio};` : '';
+      const col = clamp(m.col, 1, settings.desktopColumns);
+      const bg = m.transparent ? 'transparent' : (m.color || '#8c6c3c');
+      const outline = m.borderWidth > 0 ? `\n  outline: ${m.borderWidth}px solid ${m.borderColor};\n  outline-offset: -${m.borderWidth}px;` : '';
+      const bgStyle = (m.type === 'box' || !m.type) ? `background: ${bg};` : '';
+      const aspect = m.aspectRatio ? `\n  aspect-ratio: ${m.aspectRatio};` : '';
 
       css += `.module-${m.id} {
-  grid-column: span ${desktopColSpan};
+  grid-column: span ${col};
   grid-row: span ${m.row};
-  ${backgroundStyle}${outlineStyle}${aspectStyle}
+  ${bgStyle}${outline}${aspect}
 }\n`;
     });
   });
 
   css += `
-
-/* 모바일 반응형 - ${getModeLabel(responsiveMode)} */
+/* --- Mobile --- */
 @media (max-width: 768px) {
-  body { padding: ${mobileGap}px; }
-  
-  .grid-viewport-wrapper .grid-container {
-    grid-template-columns: repeat(${targetColumns}, 1fr);
-    gap: ${mobileGap}px;
-    position: relative; /* 모바일에서는 중첩 대신 순서대로 */
+  /* [수정] 모바일에선 중첩 대신 순차 정렬 */
+  .grid-container {
+    position: relative;
   }
-  
 `;
 
-  layers.forEach(layer => {
-    if (!layer.isVisible) return;
-    
-    css += `\n  /* --- Layer: ${layer.name} (Mobile) --- */\n`;
-    
+  // [수정] 레이어별 모바일 스타일 생성
+  layers.filter(l => l.isVisible).forEach(layer => {
+    const { settings } = layer;
+    css += `
+  /* --- Layer: ${layer.name} (Mobile) --- */
+  #grid-layer-${layer.id} {
+    grid-template-columns: repeat(${settings.targetColumns}, 1fr);
+    gap: ${settings.mobileGap}px;
+  }
+`;
     layer.mobileOrder.forEach((id, i) => {
       const m = layer.modules.find(mod => mod.id === id);
       if (!m) return '';
-
-      const mobileSpan = getMobileSpan(m);
-      const comment = m.mobileCol !== null ? ' /* 수동 */' : ` /* 자동: min(${m.col}, ${targetColumns}) */`;
+      const mobileSpan = getMobileSpan(m, layer);
+      const comment = m.mobileCol !== null ? '/*수동*/' : `/*자동:min(${m.col},${settings.targetColumns})*/`;
       
       css += `  .module-${m.id} {
-    grid-column: span ${mobileSpan};${comment}
+    grid-column: span ${mobileSpan}; ${comment}
     grid-row: span ${m.row};
     order: ${i};
   }\n`;
@@ -771,43 +707,54 @@ function generateCSS() {
 }
 
 
-// === [수정] UI 컨트롤 및 이벤트 핸들러 ===
+// === [신규] UI 컨트롤 및 이벤트 핸들러 ===
 
 function init() {
-  // --- 글로벌 설정 리스너 ---
-  document.getElementById('columns').addEventListener('input', e => { 
-    desktopColumns = clamp(parseInt(e.target.value) || 1, 1, 12);
-    updateStats(); updateModeHint(); updateMobileSpanHint(); renderCanvas(); 
-  });
-  document.getElementById('columns').addEventListener('change', e => { saveState(); });
+  // --- [신규] 설정 패널 리스너 (활성 레이어에 적용) ---
+  function addSettingsListener(elementId, eventType, settingKey, valueFn, doSaveState = false, doRender = true) {
+    document.getElementById(elementId).addEventListener(eventType, e => {
+      const layer = getActiveLayer();
+      if (layer) {
+        layer.settings[settingKey] = valueFn(e);
+        if (doRender) renderCanvas();
+        
+        // 연관 UI 업데이트
+        updateStats();
+        updateModeHint();
+        updateMobileSpanHint();
+        updateCode();
 
-  document.getElementById('gap').addEventListener('input', e => { 
-    desktopGap = clamp(parseInt(e.target.value) || 0, 0, 50);
-    updateStats(); renderCanvas(); 
-  });
-  document.getElementById('gap').addEventListener('change', e => { saveState(); });
-
-  document.getElementById('target-columns').addEventListener('input', e => { 
-    targetColumns = clamp(parseInt(e.target.value) || 1, 1, 12); 
-    updateModeHint(); updateMobileSpanHint(); updateCode(); renderCanvas();
-  });
-  document.getElementById('target-columns').addEventListener('change', e => { saveState(); });
+        if (doSaveState) saveState();
+      }
+    });
+  }
   
-  document.getElementById('canvas-scale').addEventListener('input', e => {
-    renderCanvas(); // 배율 변경은 캔버스 렌더링
-  });
-
+  // 데스크톱 컬럼
+  addSettingsListener('columns', 'input', 'desktopColumns', e => clamp(parseInt(e.target.value) || 1, 1, 12));
+  addSettingsListener('columns', 'change', 'desktopColumns', e => clamp(parseInt(e.target.value) || 1, 1, 12), true);
+  // 데스크톱 갭
+  addSettingsListener('gap', 'input', 'desktopGap', e => clamp(parseInt(e.target.value) || 0, 0, 50));
+  addSettingsListener('gap', 'change', 'desktopGap', e => clamp(parseInt(e.target.value) || 0, 0, 50), true);
+  // 모바일 컬럼
+  addSettingsListener('target-columns', 'input', 'targetColumns', e => clamp(parseInt(e.target.value) || 1, 1, 12));
+  addSettingsListener('target-columns', 'change', 'targetColumns', e => clamp(parseInt(e.target.value) || 1, 1, 12), true);
+  // 모바일 순서 잠금
+  addSettingsListener('mobile-order-lock', 'change', 'mobileOrderLocked', e => e.target.checked, true, false); // 렌더링 불필요
+  
+  // 캔버스 배율
+  document.getElementById('canvas-scale').addEventListener('input', renderCanvas);
+  // 선택 테두리
   document.getElementById('show-selection').addEventListener('change', e => {
     showSelection = e.target.checked;
-    renderCanvas(); // 히스토리 저장 없음
+    renderCanvas();
   });
   
-  // --- 모듈 편집 리스너 (활성 레이어의 선택된 모듈에 적용) ---
+  // --- [신규] 모듈 편집 리스너 (선택된 모듈에 적용) ---
   function addEditListener(elementId, eventType, property, valueFn, doSaveState = false) {
     document.getElementById(elementId).addEventListener(eventType, e => {
-      const module = getSelectedModule();
-      if (module) {
-        module[property] = valueFn(e);
+      const moduleInfo = getSelectedModule();
+      if (moduleInfo) {
+        moduleInfo.module[property] = valueFn(e, moduleInfo.layer); // valueFn에 layer 전달
         renderCanvas();
         if(property === 'col' || property === 'mobileCol') updateMobileSpanHint();
         if (doSaveState) saveState();
@@ -815,18 +762,19 @@ function init() {
     });
   }
   
-  // input/change 이벤트를 분리하여 히스토리 저장 최적화
   addEditListener('edit-type', 'change', 'type', e => e.target.value, true);
   addEditListener('edit-group-id', 'change', 'groupId', e => e.target.value.trim() || null, true);
   
-  addEditListener('edit-col', 'input', 'col', e => clamp(parseInt(e.target.value) || 1, 1, desktopColumns));
-  addEditListener('edit-col', 'change', 'col', e => clamp(parseInt(e.target.value) || 1, 1, desktopColumns), true);
+  // [수정] 모듈 편집 시 활성 레이어의 컬럼 설정(layer.settings.desktopColumns)을 max 값으로 사용
+  addEditListener('edit-col', 'input', 'col', (e, layer) => clamp(parseInt(e.target.value) || 1, 1, layer.settings.desktopColumns));
+  addEditListener('edit-col', 'change', 'col', (e, layer) => clamp(parseInt(e.target.value) || 1, 1, layer.settings.desktopColumns), true);
   
   addEditListener('edit-row', 'input', 'row', e => clamp(parseInt(e.target.value) || 1, 1, 99));
   addEditListener('edit-row', 'change', 'row', e => clamp(parseInt(e.target.value) || 1, 1, 99), true);
   
-  addEditListener('edit-mobile-col', 'input', 'mobileCol', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, targetColumns));
-  addEditListener('edit-mobile-col', 'change', 'mobileCol', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, targetColumns), true);
+  // [수정] 모바일 컬럼 편집 시 활성 레이어의 모바일 컬럼 설정(layer.settings.targetColumns)을 max 값으로 사용
+  addEditListener('edit-mobile-col', 'input', 'mobileCol', (e, layer) => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, layer.settings.targetColumns));
+  addEditListener('edit-mobile-col', 'change', 'mobileCol', (e, layer) => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, layer.settings.targetColumns), true);
 
   addEditListener('edit-aspect-ratio', 'change', 'aspectRatio', e => e.target.checked ? '1 / 1' : null, true);
   
@@ -840,80 +788,108 @@ function init() {
   addEditListener('edit-border-width', 'change', 'borderWidth', e => clamp(parseInt(e.target.value) || 0, 0, 20), true);
   
   // --- 초기화 ---
-  addLayer(); // 'Layer 1' 추가 및 활성화 (이때 saveState가 호출됨)
-  // saveState(); // 초기 상태 저장 (addLayer가 이미 호출함)
+  addLayer(); // 'Layer 1' 추가 및 활성화 (이때 saveState, loadSettingsToUI가 모두 호출됨)
+}
+
+// [신규] 활성 레이어의 설정을 UI 패널에 로드하는 함수
+function loadSettingsToUI(layer) {
+  if (!layer) {
+      // 레이어가 없으면 UI 비활성화 (예시)
+      document.getElementById('columns').value = 6;
+      document.getElementById('gap').value = 10;
+      document.getElementById('target-columns').value = 2;
+      document.getElementById('mobile-order-lock').checked = false;
+      return;
+  }
+  const { settings } = layer;
+  document.getElementById('columns').value = settings.desktopColumns;
+  document.getElementById('gap').value = settings.desktopGap;
+  document.getElementById('target-columns').value = settings.targetColumns;
+  document.getElementById('mobile-order-lock').checked = settings.mobileOrderLocked;
+  
+  // 설정 로드 후 관련 힌트들도 업데이트
+  updateModeHint();
+  updateMobileSpanHint();
 }
 
 function updateEditPanel() {
   const panel = document.getElementById('edit-panel');
-  const module = getSelectedModule();
+  const moduleInfo = getSelectedModule();
   
-  if (!module) {
+  if (!moduleInfo) {
     panel.style.display = 'none';
     return;
   }
   
+  const { module, layer } = moduleInfo;
   panel.style.display = 'block';
   
   document.getElementById('edit-type').value = module.type || 'box';
   document.getElementById('edit-group-id').value = module.groupId || '';
   
-  document.getElementById('edit-col').value = clamp(module.col, 1, desktopColumns);
-  document.getElementById('edit-col').max = desktopColumns;
+  // [수정] 해당 레이어의 설정값을 max로 사용
+  document.getElementById('edit-col').value = clamp(module.col, 1, layer.settings.desktopColumns);
+  document.getElementById('edit-col').max = layer.settings.desktopColumns;
   document.getElementById('edit-row').value = module.row;
-  document.getElementById('edit-mobile-col').value = module.mobileCol !== null ? clamp(module.mobileCol, 1, targetColumns) : '';
-  document.getElementById('edit-mobile-col').max = targetColumns;
+  document.getElementById('edit-mobile-col').value = module.mobileCol !== null ? clamp(module.mobileCol, 1, layer.settings.targetColumns) : '';
+  document.getElementById('edit-mobile-col').max = layer.settings.targetColumns;
   
   document.getElementById('edit-aspect-ratio').checked = (module.aspectRatio === '1 / 1');
-  
   document.getElementById('edit-color').value = module.color || '#8c6c3c';
   const isTransparent = module.transparent || false;
   document.getElementById('edit-transparent').checked = isTransparent;
   toggleColorPicker('edit', isTransparent);
-  
   document.getElementById('edit-border-color').value = module.borderColor || '#000000';
   document.getElementById('edit-border-width').value = module.borderWidth || 0;
-  
   document.getElementById('split-h').value = 1;
   document.getElementById('split-v').value = 1;
 
   updateMobileSpanHint();
 }
 
-// [수정] 캔버스 클릭 (배경 클릭 시 선택 해제)
 function handleCanvasClick(event) {
   if (event.target.id === 'canvas-viewport' || event.target.classList.contains('grid-container')) {
     deselectModule();
   }
 }
 
-// [수정] 모바일 스팬 계산
+// [수정] 모바일 스팬 계산 시 layer 설정을 받음
 function calculateMobileSpan(desktopCol, desktopCols, targetCols) {
   return Math.max(1, Math.min(desktopCol, targetCols));
 }
-function getMobileSpan(module) {
-  if(module.mobileCol !== undefined && module.mobileCol !== null && module.mobileCol !== '') {
-    const clampedTarget = Math.min(module.mobileCol, targetColumns);
+function getMobileSpan(module, layer) {
+  const { settings } = layer;
+  if(module.mobileCol !== undefined && module.mobileCol !== null && module.TA !== '') {
+    const clampedTarget = Math.min(module.mobileCol, settings.targetColumns);
     return Math.max(1, clampedTarget);
   }
-  return calculateMobileSpan(module.col, desktopColumns, targetColumns);
+  return calculateMobileSpan(module.col, settings.desktopColumns, settings.targetColumns);
 }
 
-// [수정] 각종 UI 업데이트
+// [수정] 각종 UI 업데이트 (활성 레이어 기준)
 function updateStats() {
   const layer = getActiveLayer();
-  document.getElementById('stat-columns').textContent = `${desktopColumns}개`;
-  document.getElementById('stat-gap').textContent = `${desktopGap}px`;
-  document.getElementById('stat-modules').textContent = layer ? `${layer.modules.length}개` : '0개';
+  if (!layer) {
+      document.getElementById('stat-columns').textContent = `N/A`;
+      document.getElementById('stat-gap').textContent = `N/A`;
+      document.getElementById('stat-modules').textContent = `0개`;
+      return;
+  }
+  document.getElementById('stat-columns').textContent = `${layer.settings.desktopColumns}개`;
+  document.getElementById('stat-gap').textContent = `${layer.settings.desktopGap}px`;
+  document.getElementById('stat-modules').textContent = `${layer.modules.length}개`;
 }
 function updateModeHint() {
-  document.getElementById('mode-hint').textContent = `${desktopColumns}열 → ${targetColumns}열로 리플로우`;
+  const layer = getActiveLayer();
+  if (!layer) return;
+  document.getElementById('mode-hint').textContent = `${layer.settings.desktopColumns}열 → ${layer.settings.targetColumns}열로 리플로우`;
 }
 function updateMobileSpanHint() {
-  const module = getSelectedModule();
-  if(!module) return;
-  const auto = calculateMobileSpan(module.col, desktopColumns, targetColumns);
-  document.getElementById('mobile-span-hint').textContent = `자동: ${auto}열 (min(${module.col}열, ${targetColumns}열))`;
+  const moduleInfo = getSelectedModule();
+  if(!moduleInfo) return;
+  const { module, layer } = moduleInfo;
+  const auto = getMobileSpan(module, layer); // 이미 mobileCol:null을 처리함
+  document.getElementById('mobile-span-hint').textContent = `자동: ${auto}열 (min(${module.col}열, ${layer.settings.targetColumns}열))`;
 }
 function updateAddModuleHint() {
     const layer = getActiveLayer();
@@ -931,25 +907,28 @@ function updateAddModuleHint() {
     }
 }
 
-// [수정] 뷰 전환
 function switchView(view) {
   currentView = view;
   document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelector(`.view-btn[onclick="switchView('${view}')"]`).classList.add('active');
-  deselectModule(); // 뷰 전환 시 선택 해제
+  deselectModule();
   renderCanvas();
 }
 
+// [수정] 레이어별 설정값 사용
 function toggleMobileOrderLock(event) {
-  mobileOrderLocked = event.target.checked;
   const layer = getActiveLayer();
-  if (mobileOrderLocked && layer) {
+  if (!layer) return;
+  
+  layer.settings.mobileOrderLocked = event.target.checked;
+  if (layer.settings.mobileOrderLocked) {
     layer.mobileOrder = [...layer.desktopOrder];
     showToast('모바일 순서가 데스크톱에 동기화됩니다.');
     renderCanvas();
     saveState();
   } else {
     showToast('모바일 순서 동기화 해제');
+    saveState(); // 해제 상태도 저장
   }
 }
 
@@ -959,9 +938,9 @@ function toggleColorPicker(prefix, isTransparent) {
   colorInput.disabled = isTransparent;
   colorInput.style.opacity = isTransparent ? 0.5 : 1;
   if (prefix === 'edit') {
-      const module = getSelectedModule();
-      if (module && module.transparent !== isTransparent) {
-          module.transparent = isTransparent;
+      const moduleInfo = getSelectedModule();
+      if (moduleInfo && moduleInfo.module.transparent !== isTransparent) {
+          moduleInfo.module.transparent = isTransparent;
           renderCanvas();
           saveState();
       }
@@ -969,7 +948,8 @@ function toggleColorPicker(prefix, isTransparent) {
 }
 function selectMode(mode) {
   if (mode !== 'reflow') { showToast('이 모드는 현재 지원되지 않습니다.'); return; }
-  responsiveMode = mode;
+  // responsiveMode는 현재 전역으로 1개만 유지 (필요시 레이어별 설정으로 이동 가능)
+  // responsiveMode = mode; 
   document.querySelectorAll('.mode-option').forEach(opt => opt.classList.remove('selected'));
   document.querySelector(`[data-mode="${mode}"]`).classList.add('selected');
   updateModeHint();
