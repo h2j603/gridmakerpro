@@ -109,7 +109,7 @@ function renderAll() {
   updateAddModuleHint();
 }
 
-// === [수정] 레이어 패널 렌더링 (드래그 핸들 추가) ===
+// === [수정] 레이어 패널 렌더링 (모바일 터치 로직 변경) ===
 function renderLayersList() {
   const list = document.getElementById('layer-list');
   if (!list) return;
@@ -118,15 +118,13 @@ function renderLayersList() {
         onclick="activateLayer(${layer.id})"
         data-layer-id="${layer.id}"
         ondragover="handleLayerDragOver(event)"
-        ondrop="handleLayerDrop(event, ${layer.id})"
-        ontouchend="handleLayerTouchEnd(event)">
+        ondrop="handleLayerDrop(event, ${layer.id})">
       
       <div class="layer-drag-handle"
-           draggable="true"
            ondragstart="handleLayerDragStart(event, ${layer.id})"
            ondragend="handleLayerDragEnd(event)"
-           ontouchstart="handleLayerTouchStart(event, ${layer.id})"
-           ontouchmove="handleLayerTouchMove(event)">⠿</div>
+           onmousedown="handleLayerDragStart(event, ${layer.id})"
+           ontouchstart="handleLayerTouchStart(event, ${layer.id})">⠿</div>
       
       <button class="layer-btn" onclick="toggleLayerVisibility(event, ${layer.id})">
         ${layer.isVisible ? '👁️' : '🙈'}
@@ -208,9 +206,8 @@ function renderCanvas() {
              draggable="true" 
              ondragstart="handleDragStart(${layer.id}, ${moduleData.id}, ${i}, event)" 
              ondragend="handleDragEnd(event)"
-             ontouchstart="handleModuleTouchStart(event, ${layer.id}, ${moduleData.id}, ${i})"
-             ontouchmove="handleModuleTouchMove(event)"
-             ontouchend="handleModuleTouchEnd(event)">⠿</div>
+             onmousedown="handleDragStart(${layer.id}, ${moduleData.id}, ${i}, event)"
+             ontouchstart="handleModuleTouchStart(event, ${layer.id}, ${moduleData.id}, ${i})">⠿</div>
       </div>
     `}).join('');
     
@@ -228,13 +225,18 @@ function renderCanvas() {
 
 // === [수정] 레이어 드래그 앤 드롭 핸들러 (마우스) ===
 function handleLayerDragStart(event, layerId) {
+    // onmousedown 이벤트가 ondragstart보다 먼저 실행되므로, 터치와 로직을 공유
+    if (event.type === 'mousedown') {
+        event.preventDefault(); // 텍스트 드래그 방지
+    }
+    
     event.stopPropagation();
     draggedLayerId = layerId;
-    // [수정] event.target (핸들)의 부모 .layer-item에 dragging 클래스 추가
+    
     const layerItem = event.target.closest('.layer-item');
     if (layerItem) layerItem.classList.add('dragging');
     
-    if(event.dataTransfer) {
+    if(event.type === 'dragstart' && event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';
     }
 }
@@ -246,21 +248,25 @@ function handleLayerDragOver(event) {
     }
 }
 
+// [수정] 드롭 로직 (정리 기능 강화)
 function handleLayerDrop(event, targetLayerId) {
     event.stopPropagation();
-    const targetElement = event.target.closest('.layer-item');
-    if(targetElement) targetElement.classList.remove('dragging');
+    
+    // .dragging 클래스 정리
+    document.querySelectorAll('.layer-item.dragging').forEach(el => el.classList.remove('dragging'));
     
     if (draggedLayerId === null || draggedLayerId === targetLayerId) {
         draggedLayerId = null;
-        document.querySelectorAll('.layer-item.dragging').forEach(el => el.classList.remove('dragging'));
         return;
     }
 
     const draggedIndex = layers.findIndex(l => l.id === draggedLayerId);
     const targetIndex = layers.findIndex(l => l.id === targetLayerId);
 
-    if (draggedIndex === -1 || targetIndex === -1) return;
+    if (draggedIndex === -1 || targetIndex === -1) {
+        draggedLayerId = null;
+        return;
+    }
 
     const [draggedLayer] = layers.splice(draggedIndex, 1);
     layers.splice(targetIndex, 0, draggedLayer);
@@ -274,42 +280,58 @@ function handleLayerDrop(event, targetLayerId) {
 }
 
 function handleLayerDragEnd(event) {
-    // [수정] event.target (핸들)의 부모 .layer-item에서 dragging 클래스 제거
-    const layerItem = event.target.closest('.layer-item');
-    if (layerItem) layerItem.classList.remove('dragging');
+    // 드롭이 성공/실패했든 항상 .dragging 클래스 제거
+    document.querySelectorAll('.layer-item.dragging').forEach(el => el.classList.remove('dragging'));
     draggedLayerId = null;
 }
 
-// === [수정] 레이어 터치 드래그 핸들러 (모바일) ===
+// === [신규] 레이어 터치 드래그 핸들러 (모바일) ===
 function handleLayerTouchStart(event, layerId) {
     event.stopPropagation();
     draggedLayerId = layerId;
-    // [수정] event.target (핸들)의 부모 .layer-item에 dragging 클래스 추가
-    event.target.closest('.layer-item').classList.add('dragging');
+    
+    const layerItem = event.target.closest('.layer-item');
+    if (layerItem) layerItem.classList.add('dragging');
+
+    // [신규] 전역(document) 리스너 등록
+    document.addEventListener('touchmove', handleDocumentTouchMove, { passive: false });
+    document.addEventListener('touchend', handleDocumentTouchEnd);
 }
 
-function handleLayerTouchMove(event) {
-    if (!draggedLayerId) return;
-    event.preventDefault(); // [중요] 스크롤 및 텍스트 선택(긁힘) 방지
+// [신규] 전역 터치 이동 핸들러
+function handleDocumentTouchMove(event) {
+    // 모듈 드래그 중이거나 레이어 드래그 중이면 스크롤 방지
+    if (!draggedLayerId && !draggedModuleInfo) return;
+    event.preventDefault(); 
 }
 
-function handleLayerTouchEnd(event) {
-    if (!draggedLayerId) return;
-    event.stopPropagation();
+// [신규] 전역 터치 종료 핸들러
+function handleDocumentTouchEnd(event) {
+    // 1. 레이어 드래그 종료 처리
+    if (draggedLayerId) {
+        event.stopPropagation();
+        const touch = event.changedTouches[0];
+        const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+        const targetLi = targetElement ? targetElement.closest('.layer-item[data-layer-id]') : null;
 
-    // 터치가 끝난 지점의 요소를 찾음
-    const touch = event.changedTouches[0];
-    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
-    const targetLi = targetElement ? targetElement.closest('.layer-item[data-layer-id]') : null;
-
-    if (targetLi) {
-        const targetLayerId = parseInt(targetLi.dataset.layerId);
-        handleLayerDrop(event, targetLayerId); // 드롭 로직 재사용
-    } else {
-        // 드롭에 실패하면 드래그 취소
-        document.querySelectorAll('.layer-item.dragging').forEach(el => el.classList.remove('dragging'));
-        draggedLayerId = null;
+        if (targetLi) {
+            const targetLayerId = parseInt(targetLi.dataset.layerId);
+            handleLayerDrop(event, targetLayerId); // 드롭 로직 (정리 포함)
+        } else {
+            // 드롭 실패 시(허공) 수동 정리
+            document.querySelectorAll('.layer-item.dragging').forEach(el => el.classList.remove('dragging'));
+            draggedLayerId = null;
+        }
     }
+    
+    // 2. 모듈 드래그 종료 처리
+    if (draggedModuleInfo) {
+        handleModuleTouchEnd(event); // 기존 모듈 종료 로직 호출
+    }
+
+    // [신규] 전역 리스너 제거
+    document.removeEventListener('touchmove', handleDocumentTouchMove);
+    document.removeEventListener('touchend', handleDocumentTouchEnd);
 }
 
 // === [신규] 레이어 관리 함수 ===
@@ -358,19 +380,22 @@ function deleteActiveLayer() {
 }
 
 function activateLayer(layerId) {
-  if (activeLayerId === layerId) return; 
-  activeLayerId = layerId;
-  selectedModuleId = null; 
-  
-  const newActiveLayer = getActiveLayer();
-  
-  loadSettingsToUI(newActiveLayer);
-  
-  renderLayersList();
-  renderCanvas();
-  updateEditPanel();
-  updateStats();
-  updateAddModuleHint();
+    // 드래그 중에는 레이어 활성화 방지
+    if (draggedLayerId) return;
+    
+    if (activeLayerId === layerId) return; 
+    activeLayerId = layerId;
+    selectedModuleId = null; 
+    
+    const newActiveLayer = getActiveLayer();
+    
+    loadSettingsToUI(newActiveLayer);
+    
+    renderLayersList();
+    renderCanvas();
+    updateEditPanel();
+    updateStats();
+    updateAddModuleHint();
 }
 
 function renameLayer(event, layerId) {
@@ -458,14 +483,17 @@ function addCustomModule() {
 }
 
 function selectModule(layerId, moduleId) {
-  if (activeLayerId !== layerId) {
-      activateLayer(layerId);
-  }
-  if (selectedModuleId === moduleId) return; 
-  selectedModuleId = moduleId;
-  
-  updateEditPanel();
-  renderCanvas();
+    // 드래그 중에는 모듈 선택 방지
+    if (draggedModuleInfo || draggedLayerId) return;
+    
+    if (activeLayerId !== layerId) {
+        activateLayer(layerId);
+    }
+    if (selectedModuleId === moduleId) return; 
+    selectedModuleId = moduleId;
+    
+    updateEditPanel();
+    renderCanvas();
 }
 
 function deselectModule() {
@@ -582,12 +610,16 @@ function clearActiveLayer() {
 // === [수정] 모듈 드래그 앤 드롭 (마우스) ===
 
 function handleDragStart(layerId, moduleId, moduleIndexInOrder, event) {
+    // onmousedown 이벤트가 ondragstart보다 먼저 실행되므로, 터치와 로직을 공유
+    if (event.type === 'mousedown') {
+        event.preventDefault(); // 텍스트 드래그 방지
+    }
   const layer = layers.find(l => l.id === layerId);
   if (!layer || layer.isLocked) { event.preventDefault(); return; }
   
   draggedModuleInfo = { layerId, moduleId, moduleIndexInOrder };
   event.target.closest('.module').classList.add('dragging');
-  if(event.dataTransfer) {
+  if(event.type === 'dragstart' && event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', moduleId);
   }
@@ -616,6 +648,9 @@ function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
   
   const layer = layers.find(l => l.id === targetLayerId);
   if (!layer || layer.isLocked) return;
+  
+  // 드롭 시 .dragging 클래스 정리
+  document.querySelectorAll('.module.dragging').forEach(el => el.classList.remove('dragging'));
 
   const order = currentView === 'desktop' ? layer.desktopOrder : layer.mobileOrder;
   const draggedId = draggedModuleInfo.moduleId;
@@ -688,13 +723,15 @@ function handleModuleTouchStart(event, layerId, moduleId, index) {
     
     draggedModuleInfo = { layerId, moduleId, moduleIndexInOrder: index };
     event.target.closest('.module').classList.add('dragging');
+    
+    // [신규] 전역(document) 리스너 등록
+    document.addEventListener('touchmove', handleDocumentTouchMove, { passive: false });
+    document.addEventListener('touchend', handleDocumentTouchEnd);
 }
 
-function handleModuleTouchMove(event) {
-    if (!draggedModuleInfo) return;
-    event.preventDefault(); 
-}
+// [수정] handleModuleTouchMove -> 삭제 (handleDocumentTouchMove가 대체)
 
+// [수정] handleModuleTouchEnd -> 전역 리스너(handleDocumentTouchEnd)가 호출하도록 변경
 function handleModuleTouchEnd(event) {
     if (!draggedModuleInfo) return;
     event.stopPropagation();
@@ -711,15 +748,21 @@ function handleModuleTouchEnd(event) {
         const targetLayerId = moduleInfo[0];
         const targetModuleIndex = moduleInfo[2];
         
-        handleDrop(event, targetLayerId, targetModuleIndex); 
+        handleDrop(event, targetLayerId, targetModuleIndex); // 드롭 로직 (정리 포함)
         dropped = true;
     } else if (targetGrid) {
         const targetLayerId = parseInt(targetGrid.id.split('-')[1]);
-        handleDrop(event, targetLayerId, null); 
+        handleDrop(event, targetLayerId, null); // 드롭 로직 (정리 포함)
         dropped = true;
     }
 
-    handleDragEnd(event);
+    // 드롭이 실패한 경우(허공) .dragging 클래스 수동 제거
+    if (!dropped) {
+        document.querySelectorAll('.module.dragging').forEach(el => el.classList.remove('dragging'));
+        draggedModuleInfo = null;
+    }
+    
+    // 전역 리스너 제거는 handleDocumentTouchEnd에서 공통 처리
 }
 
 // === [수정] 코드 생성 (블렌딩 격리 추가) ===
