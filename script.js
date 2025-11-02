@@ -155,7 +155,7 @@ function renderLayersList() {
 }
 
 
-// === [수정] 캔버스 렌더링 (aspectRatio 버그 수정) ===
+// === [수정] 캔버스 렌더링 (aspectRatio + min-height 버그 수정) ===
 function renderCanvas() {
   const viewport = document.getElementById('canvas-viewport');
   if (!viewport) return;
@@ -220,15 +220,16 @@ function renderCanvas() {
       const selectedClass = (showSelection && isSelected) ? 'selected' : '';
       const groupedClass = (showSelection && selectedGroupId && moduleData.groupId === selectedGroupId && !isSelected) ? 'grouped' : '';
       
-      // [수정] aspectRatio가 활성화되면 grid-row를 'auto'로 변경
+      // [수정] aspectRatio가 활성화되면 grid-row를 'auto'로, min-height를 'unset'으로 변경
       const aspectStyle = moduleData.aspectRatio ? `aspect-ratio: ${moduleData.aspectRatio};` : '';
       const rowStyle = moduleData.aspectRatio ? 'auto' : `span ${moduleData.row}`;
+      const minHeightStyle = moduleData.aspectRatio ? 'min-height: unset;' : ''; // min-height: 60px 충돌 방지
       
       const backgroundStyle = (moduleType === 'box') ? `background: ${bgColor};` : '';
 
       return `
       <div class="module ${selectedClass} ${groupedClass} ${showWarning ? 'warning' : ''}" 
-           style="grid-column: span ${col}; grid-row: ${rowStyle}; ${backgroundStyle} ${outlineStyle} ${aspectStyle} ${moduleFlexStyles}"
+           style="grid-column: span ${col}; grid-row: ${rowStyle}; ${backgroundStyle} ${outlineStyle} ${aspectStyle} ${moduleFlexStyles} ${minHeightStyle}"
            data-type="${moduleType}"
            data-group-id="${moduleData.groupId || ''}"
            data-module-info="${layer.id},${moduleData.id},${i}"
@@ -722,7 +723,7 @@ function handleDocumentTouchEnd(event) {
     document.removeEventListener('touchend', handleDocumentTouchEnd);
 }
 
-// === [수정] 코드 생성 (aspectRatio 버그 수정) ===
+// === [수정] 코드 생성 (aspectRatio + min-height 버그 수정) ===
 
 function generateHTML() {
   let html = `<!DOCTYPE html>
@@ -828,9 +829,10 @@ function generateCSS() {
       const outline = m.borderWidth > 0 ? `\n  outline: ${m.borderWidth}px solid ${m.borderColor};\n  outline-offset: -${m.borderWidth}px;` : '';
       const bgStyle = (m.type === 'box' || !m.type) ? `background: ${bg};` : '';
       
-      // [수정] aspectRatio가 활성화되면 grid-row를 'auto'로 변경
+      // [수정] aspectRatio가 활성화되면 grid-row를 'auto'로, min-height를 'unset'으로 변경
       const aspect = m.aspectRatio ? `\n  aspect-ratio: ${m.aspectRatio};` : '';
       const row = m.aspectRatio ? 'auto' : `span ${m.row}`;
+      const minHeight = m.aspectRatio ? '\n  min-height: unset;' : ''; // min-height: 60px 충돌 방지
 
       let moduleSpecificStyles = '';
       if (m.type === 'box') {
@@ -843,7 +845,7 @@ function generateCSS() {
       css += `.module-${m.id} {
   grid-column: span ${col};
   grid-row: ${row};
-  ${bgStyle}${outline}${aspect}${moduleSpecificStyles}
+  ${bgStyle}${outline}${aspect}${moduleSpecificStyles}${minHeight}
 }\n`;
 
       if (m.type === 'box') {
@@ -881,14 +883,15 @@ function generateCSS() {
       const mobileSpan = getMobileSpan(m, layer);
       const comment = m.mobileCol !== null ? '/*수동*/' : `/*자동:min(${m.col},${settings.targetColumns})*/`;
       
-      // [수정] 모바일에서도 aspectRatio가 활성화되면 grid-row를 'auto'로 변경
+      // [수정] 모바일에서도 aspectRatio가 활성화되면 grid-row를 'auto'로, min-height를 'unset'으로 변경
       const aspect = m.aspectRatio ? `\n    aspect-ratio: ${m.aspectRatio};` : '';
       const row = m.aspectRatio ? 'auto' : `span ${m.row}`;
+      const minHeight = m.aspectRatio ? '\n    min-height: unset;' : ''; // min-height: 60px 충돌 방지
 
       css += `  .module-${m.id} {
     grid-column: span ${mobileSpan}; ${comment}
     grid-row: ${row};
-    order: ${i};${aspect}
+    order: ${i};${aspect}${minHeight}
   }\n`;
     });
   });
@@ -945,7 +948,7 @@ function init() {
       const moduleInfo = getSelectedModule();
       if (moduleInfo) {
         moduleInfo.module[property] = valueFn(e, moduleInfo.layer, moduleInfo.module); 
-        renderCanvas();
+        renderCanvas(); // [수정] 텍스트 입력 즉시 반영을 위해 renderCanvas() 호출 보장
         if(property === 'col' || property === 'mobileCol') updateMobileSpanHint();
         if(property === 'type') updateEditPanel();
         
@@ -969,7 +972,9 @@ function init() {
   addEditListener('edit-font-size', 'input', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100));
   addEditListener('edit-font-size', 'change', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100), true);
   addEditListener('edit-font-weight', 'change', 'fontWeight', e => e.target.value, true);
-  addEditListener('edit-text-content', 'input', 'textContent', e => e.target.value);
+  
+  // [수정] 텍스트 입력 'input' 리스너가 'change'와 동일하게 saveState만 false로 작동하도록 보장
+  addEditListener('edit-text-content', 'input', 'textContent', e => e.target.value, false);
   addEditListener('edit-text-content', 'change', 'textContent', e => e.target.value, true);
   
   addEditListener('edit-col', 'input', 'col', (e, layer) => clamp(parseInt(e.target.value) || 1, 1, layer.settings.desktopColumns));
