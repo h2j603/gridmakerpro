@@ -24,7 +24,7 @@
     <div class="panel">
 
       <div class="control-group" id="layer-panel">
-        <h3>🎨 레이어 (핸들로 순서 변경)</h3>
+        <h3>🎨 레이어 (우선순위로 순서 변경)</h3>
         <ul id="layer-list">
           </ul>
         <div class="btn-group" style="margin-top: 12px;">
@@ -139,7 +139,11 @@
           
           <label class="control-label">폰트 크기 (px)</label>
           <input type="number" id="edit-font-size" class="control-input" min="8" max="100" placeholder="기본 (14px)">
+          
+          <label class="control-label" style="margin-top: 8px">텍스트 내용</label>
+          <textarea id="edit-text-content" class="control-input" rows="3" style="font-family: inherit; white-space: pre-wrap;"></textarea>
         </div>
+
         <label class="control-label" style="margin-top: 12px;">1:1 비율</label>
         <div style="display: flex; align-items: center; gap: 5px;">
             <input type="checkbox" id="edit-aspect-ratio">
@@ -153,7 +157,7 @@
           <label for="edit-transparent" style="font-size: 0.85em;">배경 투명</label>
         </div>
         <label class="control-label" style="margin-top: 12px">윤곽선 색</label>
-        <input type="color" id="edit-border-color" class="control-input" style="height: 40px; cursor: pointer;">
+        <input type="color" id="edit-border-color" class="control-input" value="#000000" style="height: 40px; cursor: pointer;">
         <label class="control-label" style="margin-top: 12px">윤곽선 두께 (px)</label>
         <input type="number" id="edit-border-width" class="control-input" value="0" min="0" max="20">
         
