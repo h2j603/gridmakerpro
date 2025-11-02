@@ -109,8 +109,7 @@ function renderAll() {
   updateAddModuleHint();
 }
 
-// === [신규] 레이어 패널 렌더링 (수정) ===
-// [수정] data-layer-id 및 ontouch... 이벤트 핸들러 추가
+// === [수정] 레이어 패널 렌더링 (드래그 핸들 추가) ===
 function renderLayersList() {
   const list = document.getElementById('layer-list');
   if (!list) return;
@@ -118,14 +117,17 @@ function renderLayersList() {
     <li class="layer-item ${layer.id === activeLayerId ? 'active' : ''} ${layer.isLocked ? 'locked' : ''}" 
         onclick="activateLayer(${layer.id})"
         data-layer-id="${layer.id}"
-        draggable="true"
-        ondragstart="handleLayerDragStart(event, ${layer.id})"
         ondragover="handleLayerDragOver(event)"
         ondrop="handleLayerDrop(event, ${layer.id})"
-        ondragend="handleLayerDragEnd(event)"
-        ontouchstart="handleLayerTouchStart(event, ${layer.id})"
-        ontouchmove="handleLayerTouchMove(event)"
         ontouchend="handleLayerTouchEnd(event)">
+      
+      <div class="layer-drag-handle"
+           draggable="true"
+           ondragstart="handleLayerDragStart(event, ${layer.id})"
+           ondragend="handleLayerDragEnd(event)"
+           ontouchstart="handleLayerTouchStart(event, ${layer.id})"
+           ontouchmove="handleLayerTouchMove(event)">⠿</div>
+      
       <button class="layer-btn" onclick="toggleLayerVisibility(event, ${layer.id})">
         ${layer.isVisible ? '👁️' : '🙈'}
       </button>
@@ -141,7 +143,7 @@ function renderLayersList() {
 }
 
 
-// === [수정] 캔버스 렌더링 (레이어별 설정 적용) ===
+// === [수정] 캔버스 렌더링 (블렌딩 격리 추가) ===
 function renderCanvas() {
   const viewport = document.getElementById('canvas-viewport');
   if (!viewport) return;
@@ -224,11 +226,14 @@ function renderCanvas() {
   }).join('');
 }
 
-// === [신규] 레이어 드래그 앤 드롭 핸들러 (마우스) ===
+// === [수정] 레이어 드래그 앤 드롭 핸들러 (마우스) ===
 function handleLayerDragStart(event, layerId) {
     event.stopPropagation();
     draggedLayerId = layerId;
-    event.target.classList.add('dragging');
+    // [수정] event.target (핸들)의 부모 .layer-item에 dragging 클래스 추가
+    const layerItem = event.target.closest('.layer-item');
+    if (layerItem) layerItem.classList.add('dragging');
+    
     if(event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';
     }
@@ -269,14 +274,17 @@ function handleLayerDrop(event, targetLayerId) {
 }
 
 function handleLayerDragEnd(event) {
-    event.target.classList.remove('dragging');
+    // [수정] event.target (핸들)의 부모 .layer-item에서 dragging 클래스 제거
+    const layerItem = event.target.closest('.layer-item');
+    if (layerItem) layerItem.classList.remove('dragging');
     draggedLayerId = null;
 }
 
-// === [신규] 레이어 터치 드래그 핸들러 (모바일) ===
+// === [수정] 레이어 터치 드래그 핸들러 (모바일) ===
 function handleLayerTouchStart(event, layerId) {
     event.stopPropagation();
     draggedLayerId = layerId;
+    // [수정] event.target (핸들)의 부모 .layer-item에 dragging 클래스 추가
     event.target.closest('.layer-item').classList.add('dragging');
 }
 
@@ -532,7 +540,7 @@ function splitSelectedModule() {
         groupId: newGroupId,
       };
       newModules.push(newModule);
-      newModuleIds.push(newModules[i].id);
+      newModuleIds.push(newModule.id);
     }
   }
 
@@ -684,14 +692,13 @@ function handleModuleTouchStart(event, layerId, moduleId, index) {
 
 function handleModuleTouchMove(event) {
     if (!draggedModuleInfo) return;
-    event.preventDefault(); // [중요] 스크롤 및 텍스트 선택(긁힘) 방지
+    event.preventDefault(); 
 }
 
 function handleModuleTouchEnd(event) {
     if (!draggedModuleInfo) return;
     event.stopPropagation();
 
-    // 터치가 끝난 지점의 요소를 찾음
     const touch = event.changedTouches[0];
     const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
 
@@ -700,25 +707,22 @@ function handleModuleTouchEnd(event) {
 
     let dropped = false;
     if (targetModule) {
-        // [레이어ID, 모듈ID, 인덱스]
         const moduleInfo = targetModule.dataset.moduleInfo.split(',').map(Number);
         const targetLayerId = moduleInfo[0];
         const targetModuleIndex = moduleInfo[2];
         
-        handleDrop(event, targetLayerId, targetModuleIndex); // 드롭 로직 재사용
+        handleDrop(event, targetLayerId, targetModuleIndex); 
         dropped = true;
     } else if (targetGrid) {
-        // 모듈이 아닌 빈 그리드 영역에 드롭
         const targetLayerId = parseInt(targetGrid.id.split('-')[1]);
-        handleDrop(event, targetLayerId, null); // 드롭 로직 재사용
+        handleDrop(event, targetLayerId, null); 
         dropped = true;
     }
 
-    // 드롭이 성공했든 실패했든(허공에 드롭) 드래그 상태를 정리
     handleDragEnd(event);
 }
 
-// === [수정] 코드 생성 (레이어별 설정 적용) ===
+// === [수정] 코드 생성 (블렌딩 격리 추가) ===
 
 function generateHTML() {
   let html = `<!DOCTYPE html>
@@ -773,7 +777,6 @@ function generateCSS() {
   width: 100%;
   pointer-events: none; 
 }
-/* [수정] 'last-of-type' 핵 제거, 모든 레이어가 앱과 동일하게 동작하도록 */
 .grid-container .module {
   pointer-events: auto; /* 모듈은 클릭 가능하게 */
 }
