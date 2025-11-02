@@ -155,7 +155,7 @@ function renderLayersList() {
 }
 
 
-// === [수정] 캔버스 렌더링 (Box/Text 통합 + fontWeight) ===
+// === [수정] 캔버스 렌더링 (aspectRatio 버그 수정) ===
 function renderCanvas() {
   const viewport = document.getElementById('canvas-viewport');
   if (!viewport) return;
@@ -168,7 +168,6 @@ function renderCanvas() {
   const selectedModuleInfo = getSelectedModule();
   const selectedGroupId = (selectedModuleInfo && selectedModuleInfo.module.groupId) ? selectedModuleInfo.module.groupId : null;
 
-  // [수정] 정렬된 레이어 순서대로 렌더링 (Z-index 결정)
   viewport.innerHTML = getSortedLayers().map(layer => {
     if (!layer.isVisible) return `<div class="grid-container hidden" id="grid-${layer.id}"></div>`;
     
@@ -202,7 +201,6 @@ function renderCanvas() {
       if (moduleType === 'image') { 
         innerHTML = `<img src="https://via.placeholder.com/${desktopColSpan * 100}x${moduleData.row * 50}" alt="placeholder" class="module-content image">`; 
       } else { 
-        // [수정] 'box' 타입이 기본적으로 텍스트 컨테이너 역할을 함
         const textStyles = `
           text-align: ${moduleData.textAlign || 'left'};
           color: ${moduleData.fontColor || '#000000'};
@@ -221,15 +219,16 @@ function renderCanvas() {
       
       const selectedClass = (showSelection && isSelected) ? 'selected' : '';
       const groupedClass = (showSelection && selectedGroupId && moduleData.groupId === selectedGroupId && !isSelected) ? 'grouped' : '';
-      // [수정] aspectRatio 로직 수정
+      
+      // [수정] aspectRatio가 활성화되면 grid-row를 'auto'로 변경
       const aspectStyle = moduleData.aspectRatio ? `aspect-ratio: ${moduleData.aspectRatio};` : '';
-
-      // [수정] background 스타일이 box일 때만 적용되도록 수정
+      const rowStyle = moduleData.aspectRatio ? 'auto' : `span ${moduleData.row}`;
+      
       const backgroundStyle = (moduleType === 'box') ? `background: ${bgColor};` : '';
 
       return `
       <div class="module ${selectedClass} ${groupedClass} ${showWarning ? 'warning' : ''}" 
-           style="grid-column: span ${col}; grid-row: span ${moduleData.row}; ${backgroundStyle} ${outlineStyle} ${aspectStyle} ${moduleFlexStyles}"
+           style="grid-column: span ${col}; grid-row: ${rowStyle}; ${backgroundStyle} ${outlineStyle} ${aspectStyle} ${moduleFlexStyles}"
            data-type="${moduleType}"
            data-group-id="${moduleData.groupId || ''}"
            data-module-info="${layer.id},${moduleData.id},${i}"
@@ -261,34 +260,23 @@ function renderCanvas() {
   }).join('');
 }
 
-// === [삭제] 레이어 드래그 앤 드롭 핸들러 (모두 삭제) ===
-// (기존 코드와 동일하게 삭제됨)
 
 // === [신규] 레이어 우선순위 관리 함수 ===
 function updateLayerPriority(event, layerId) {
   event.stopPropagation();
   const layer = layers.find(l => l.id === layerId);
   if (!layer) return;
-  
-  // 입력된 값을 우선순위로 설정
   layer.priority = parseFloat(event.target.value) || 0;
-  
-  // 모든 레이어의 우선순위를 정규화 (0, 1, 2, 3...)
   normalizeLayerPriorities();
-  
   saveState();
-  renderLayersList(); // 새 순서(와 새 번호)로 목록 다시 그림
-  renderCanvas();     // 새 Z-index 순서로 캔버스 다시 그림
+  renderLayersList();
+  renderCanvas();
   updateCode();
 }
 
 function normalizeLayerPriorities() {
-  // 현재 설정된 우선순위 값 기준으로 정렬
   const sorted = [...layers].sort((a, b) => a.priority - b.priority);
-  
-  // 0부터 순서대로 번호(priority)를 다시 매김
   sorted.forEach((layer, index) => {
-    // 원본 layers 배열에서 해당 객체를 찾아 priority 값을 업데이트
     const originalLayer = layers.find(l => l.id === layer.id);
     if (originalLayer) {
       originalLayer.priority = index;
@@ -300,14 +288,12 @@ function normalizeLayerPriorities() {
 // === [신규] 레이어 관리 함수 ===
 function addLayer() {
   const newName = `Layer ${layers.length + 1}`;
-  
-  // [신규] 새 레이어는 가장 높은 우선순위 값(가장 위에 보임)을 가짐
   const newPriority = layers.length > 0 ? Math.max(...layers.map(l => l.priority)) + 1 : 0;
 
   const newLayer = {
     id: Date.now(),
     name: newName,
-    priority: newPriority, // [수정] priority 속성 추가
+    priority: newPriority,
     modules: [],
     desktopOrder: [],
     mobileOrder: [],
@@ -323,9 +309,8 @@ function addLayer() {
     }
   };
   layers.push(newLayer);
-  
   activateLayer(newLayer.id); 
-  saveState(); // [수정] Undo를 위해 saveState() 호출
+  saveState();
   showToast(`${newName} 추가됨`);
 }
 
@@ -340,10 +325,7 @@ function deleteActiveLayer() {
     layers = layers.filter(l => l.id !== layer.id);
     activeLayerId = layers[layers.length - 1].id;
     selectedModuleId = null;
-
-    // [신규] 레이어 삭제 후 우선순위 정규화
     normalizeLayerPriorities();
-
     renderAll();
     loadSettingsToUI(getActiveLayer()); 
     updateEditPanel();
@@ -356,11 +338,8 @@ function activateLayer(layerId) {
     if (activeLayerId === layerId) return; 
     activeLayerId = layerId;
     selectedModuleId = null; 
-    
     const newActiveLayer = getActiveLayer();
-    
     loadSettingsToUI(newActiveLayer);
-    
     renderLayersList();
     renderCanvas();
     updateEditPanel();
@@ -423,7 +402,7 @@ function addCustomModule() {
   const transparent = document.getElementById('custom-transparent').checked;
   const borderColor = document.getElementById('custom-border-color').value;
   const borderWidth = clamp(parseInt(document.getElementById('custom-border-width').value) || 0, 0, 20);
-  const type = document.getElementById('custom-type').value; // 'box' 또는 'image'
+  const type = document.getElementById('custom-type').value;
   
   const newModule = { 
     col, row, color, transparent, borderColor, borderWidth, 
@@ -431,13 +410,12 @@ function addCustomModule() {
     type: type, 
     groupId: null,
     aspectRatio: null,
-    // [수정] Box 타입도 텍스트 속성을 가짐 (기본값)
-    textContent: '', // 'Lorem ipsum...' -> ''
+    textContent: '',
     textAlign: 'left',
     verticalAlign: 'flex-start',
     fontColor: '#000000',
     fontSize: null,
-    fontWeight: '400' // [신규] 폰트 굵기 기본값
+    fontWeight: '400'
   };
   
   layer.modules.push(newModule);
@@ -461,13 +439,11 @@ function addCustomModule() {
 
 function selectModule(layerId, moduleId) {
     if (draggedModuleInfo) return;
-    
     if (activeLayerId !== layerId) {
         activateLayer(layerId);
     }
     if (selectedModuleId === moduleId) return; 
     selectedModuleId = moduleId;
-    
     updateEditPanel();
     renderCanvas();
 }
@@ -482,7 +458,6 @@ function deselectModule() {
 
 function deleteModule(layerId, moduleId, event) {
   event.stopPropagation();
-  
   const layer = layers.find(l => l.id === layerId);
   if (!layer) return;
   if (layer.isLocked) {
@@ -498,7 +473,6 @@ function deleteModule(layerId, moduleId, event) {
     selectedModuleId = null;
     updateEditPanel();
   }
-  
   renderCanvas();
   updateStats();
   updateCode();
@@ -523,7 +497,6 @@ function splitSelectedModule() {
 
   if (h === 1 && v === 1) return;
 
-  // [수정] 분할 버그 방지 (0-span 생성 금지)
   if (h > module.col || v > module.row) {
     showToast(`모듈 크기(${module.col}x${module.row})보다 더 잘게 쪼갤 수 없습니다.`);
     return;
@@ -543,17 +516,15 @@ function splitSelectedModule() {
     for (let c = 0; c < h; c++) { 
       const newCol = baseCol + (c < remainderCol ? 1 : 0);
       const newModule = {
-        ...deepCopy(module), // [중요] 텍스트 속성도 여기서 복사됨
+        ...deepCopy(module),
         id: Date.now() + (r * h + c),
         col: newCol, 
         row: newRow, 
         groupId: newGroupId,
       };
-      // [수정] 분할된 첫 번째 모듈만 텍스트를 유지하고 나머지는 비움
       if (r > 0 || c > 0) {
         newModule.textContent = '';
       }
-      // [수정] 분할 시 비율 고정은 해제
       newModule.aspectRatio = null;
       newModules.push(newModule);
       newModuleIds.push(newModule.id);
@@ -714,13 +685,11 @@ function handleModuleTouchStart(event, layerId, moduleId, index) {
     document.addEventListener('touchend', handleDocumentTouchEnd);
 }
 
-// [신규] 전역 터치 이동 핸들러 (모듈용)
 function handleDocumentTouchMove(event) {
     if (!draggedModuleInfo) return;
     event.preventDefault(); 
 }
 
-// [신규] 전역 터치 종료 핸들러 (모듈용)
 function handleDocumentTouchEnd(event) {
     if (draggedModuleInfo) {
         event.stopPropagation();
@@ -735,13 +704,10 @@ function handleDocumentTouchEnd(event) {
             const moduleInfo = targetModule.dataset.moduleInfo.split(',').map(Number);
             const targetLayerId = moduleInfo[0];
             const targetModuleIndex = moduleInfo[2];
-            
-            // [수정] handleDrop 인자 순서 버그 수정
             handleDrop(targetLayerId, targetModuleIndex, event); 
             dropped = true;
         } else if (targetGrid) {
             const targetLayerId = parseInt(targetGrid.id.split('-')[1]);
-            // [수정] handleDrop 인자 순서 버그 수정
             handleDrop(targetLayerId, null, event); 
             dropped = true;
         }
@@ -756,7 +722,7 @@ function handleDocumentTouchEnd(event) {
     document.removeEventListener('touchend', handleDocumentTouchEnd);
 }
 
-// === [수정] 코드 생성 (Box/Text 통합 + fontWeight) ===
+// === [수정] 코드 생성 (aspectRatio 버그 수정) ===
 
 function generateHTML() {
   let html = `<!DOCTYPE html>
@@ -771,7 +737,6 @@ function generateHTML() {
   <div class="grid-viewport-wrapper">
 `;
 
-  // [수정] 정렬된 레이어 순서대로 HTML 생성
   getSortedLayers().filter(l => l.isVisible).forEach(layer => {
     html += `
     <div class="grid-container" id="grid-layer-${layer.id}">
@@ -780,7 +745,6 @@ function generateHTML() {
       if (!m) return '';
       const groupClass = m.groupId ? ` group-${m.groupId}` : '';
       
-      // [수정] Box/Text 통합
       let innerContent = '';
       if (m.type === 'image') {
         innerContent = '      <img src="https://via.placeholder.com/150" alt="placeholder">';
@@ -806,7 +770,7 @@ ${innerContent}
 function generateCSS() {
   let css = `body {
   margin: 0;
-  background: whitespoke;
+  background: whitesmoke;
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   padding: ${layers.length > 0 ? getSortedLayers()[0].settings.desktopGap : 10}px;
 }
@@ -833,9 +797,7 @@ function generateCSS() {
 .module.type-image { background: #e0e0e0; }
 .module.type-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-/* [수정] .type-text -> .type-box 로 통합 */
 .module.type-box { 
-  /* 배경색은 인라인으로 적용됨 */
   display: flex;
   padding: 10px;
 }
@@ -844,13 +806,11 @@ function generateCSS() {
   color: #000;
   width: 100%;
   margin: 0;
-  /* [신규] 텍스트 줄바꿈 적용 (출력용) */
   white-space: pre-wrap;
   word-break: break-word;
 }
 `;
 
-  // [수정] 정렬된 레이어 순서대로 CSS 생성
   getSortedLayers().filter(l => l.isVisible).forEach(layer => {
     const { settings } = layer;
     css += `
@@ -867,8 +827,10 @@ function generateCSS() {
       const bg = m.transparent ? 'transparent' : (m.color || '#8c6c3c');
       const outline = m.borderWidth > 0 ? `\n  outline: ${m.borderWidth}px solid ${m.borderColor};\n  outline-offset: -${m.borderWidth}px;` : '';
       const bgStyle = (m.type === 'box' || !m.type) ? `background: ${bg};` : '';
-      // [수정] aspectRatio 로직 수정
+      
+      // [수정] aspectRatio가 활성화되면 grid-row를 'auto'로 변경
       const aspect = m.aspectRatio ? `\n  aspect-ratio: ${m.aspectRatio};` : '';
+      const row = m.aspectRatio ? 'auto' : `span ${m.row}`;
 
       let moduleSpecificStyles = '';
       if (m.type === 'box') {
@@ -880,7 +842,7 @@ function generateCSS() {
 
       css += `.module-${m.id} {
   grid-column: span ${col};
-  grid-row: span ${m.row};
+  grid-row: ${row};
   ${bgStyle}${outline}${aspect}${moduleSpecificStyles}
 }\n`;
 
@@ -919,10 +881,14 @@ function generateCSS() {
       const mobileSpan = getMobileSpan(m, layer);
       const comment = m.mobileCol !== null ? '/*수동*/' : `/*자동:min(${m.col},${settings.targetColumns})*/`;
       
+      // [수정] 모바일에서도 aspectRatio가 활성화되면 grid-row를 'auto'로 변경
+      const aspect = m.aspectRatio ? `\n    aspect-ratio: ${m.aspectRatio};` : '';
+      const row = m.aspectRatio ? 'auto' : `span ${m.row}`;
+
       css += `  .module-${m.id} {
     grid-column: span ${mobileSpan}; ${comment}
-    grid-row: span ${m.row};
-    order: ${i};
+    grid-row: ${row};
+    order: ${i};${aspect}
   }\n`;
     });
   });
@@ -941,12 +907,10 @@ function init() {
       if (layer) {
         layer.settings[settingKey] = valueFn(e);
         if (doRender) renderCanvas();
-        
         updateStats();
         updateModeHint();
         updateMobileSpanHint();
         updateCode();
-
         if (doSaveState) saveState();
       }
     });
@@ -961,7 +925,6 @@ function init() {
   addSettingsListener('target-columns', 'change', 'targetColumns', e => clamp(parseInt(e.target.value) || 1, 1, 12), true);
   addSettingsListener('mobile-order-lock', 'change', 'mobileOrderLocked', e => e.target.checked, true, false); 
   
-  // [수정] 캔버스 배율 % 표시 기능 추가
   document.getElementById('canvas-scale').addEventListener('input', (e) => {
     renderCanvas();
     document.getElementById('scale-readout').textContent = `${e.target.value}%`;
@@ -986,7 +949,6 @@ function init() {
         if(property === 'col' || property === 'mobileCol') updateMobileSpanHint();
         if(property === 'type') updateEditPanel();
         
-        // [수정] col 또는 row 변경 시 aspectRatio 업데이트
         if ((property === 'col' || property === 'row') && moduleInfo.module.aspectRatio) {
           moduleInfo.module.aspectRatio = `${moduleInfo.module.col} / ${moduleInfo.module.row}`;
           updateAspectRatioLabel(moduleInfo.module);
@@ -1000,14 +962,13 @@ function init() {
   addEditListener('edit-type', 'change', 'type', e => e.target.value, true);
   addEditListener('edit-group-id', 'change', 'groupId', e => e.target.value.trim() || null, true);
 
-  // [신규] 텍스트 옵션 리스너 (Box/Text 공용)
   addEditListener('edit-text-align', 'change', 'textAlign', e => e.target.value, true);
   addEditListener('edit-vertical-align', 'change', 'verticalAlign', e => e.target.value, true);
   addEditListener('edit-font-color', 'input', 'fontColor', e => e.target.value);
   addEditListener('edit-font-color', 'change', 'fontColor', e => e.target.value, true);
   addEditListener('edit-font-size', 'input', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100));
   addEditListener('edit-font-size', 'change', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100), true);
-  addEditListener('edit-font-weight', 'change', 'fontWeight', e => e.target.value, true); // [신규] 폰트 굵기 리스너
+  addEditListener('edit-font-weight', 'change', 'fontWeight', e => e.target.value, true);
   addEditListener('edit-text-content', 'input', 'textContent', e => e.target.value);
   addEditListener('edit-text-content', 'change', 'textContent', e => e.target.value, true);
   
@@ -1018,10 +979,9 @@ function init() {
   addEditListener('edit-mobile-col', 'input', 'mobileCol', (e, layer) => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, layer.settings.targetColumns));
   addEditListener('edit-mobile-col', 'change', 'mobileCol', (e, layer) => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, layer.settings.targetColumns), true);
   
-  // [수정] aspectRatio 로직 수정
   addEditListener('edit-aspect-ratio', 'change', 'aspectRatio', (e, layer, module) => {
     const newRatio = e.target.checked ? `${module.col} / ${module.row}` : null;
-    updateAspectRatioLabel(module, newRatio); // 라벨 즉시 업데이트
+    updateAspectRatioLabel(module, newRatio);
     return newRatio;
   }, true);
 
@@ -1055,19 +1015,17 @@ function loadSettingsToUI(layer) {
   updateMobileSpanHint();
 }
 
-// [수정] aspectRatio 라벨 업데이트 함수
 function updateAspectRatioLabel(module, newRatio) {
   const label = document.getElementById('edit-aspect-ratio-label');
-  const ratio = newRatio !== undefined ? newRatio : module.aspectRatio; // 즉각적인 값 반영
+  const ratio = newRatio !== undefined ? newRatio : module.aspectRatio;
   
   if (ratio) {
     label.textContent = `비율 고정 (${ratio.replace(/\s/g, '')})`;
   } else {
-    label.textContent = `비율 고정`;
+    label.textContent = `비율 고정 (${module.col}:${module.row})`;
   }
 }
 
-// [수정] 텍스트 패널 (fontWeight, aspectRatio)
 function updateEditPanel() {
   const panel = document.getElementById('edit-panel');
   const moduleInfo = getSelectedModule();
@@ -1084,16 +1042,15 @@ function updateEditPanel() {
   document.getElementById('edit-group-id').value = module.groupId || '';
   
   const textOptionsPanel = document.getElementById('text-options-panel');
-  // [수정] 'box' 타입일 때 텍스트 옵션 표시
   if (module.type === 'box') {
     textOptionsPanel.style.display = 'block';
     document.getElementById('edit-text-align').value = module.textAlign || 'left';
     document.getElementById('edit-vertical-align').value = module.verticalAlign || 'flex-start';
     document.getElementById('edit-font-color').value = module.fontColor || '#000000';
     document.getElementById('edit-font-size').value = module.fontSize || ''; 
-    document.getElementById('edit-font-weight').value = module.fontWeight || '400'; // [신규] 폰트 굵기 로드
+    document.getElementById('edit-font-weight').value = module.fontWeight || '400';
     document.getElementById('edit-text-content').value = module.textContent || '';
-  } else { // 'image' 타입일 때 숨김
+  } else {
     textOptionsPanel.style.display = 'none';
   }
   
@@ -1103,10 +1060,9 @@ function updateEditPanel() {
   document.getElementById('edit-mobile-col').value = module.mobileCol !== null ? clamp(module.mobileCol, 1, layer.settings.targetColumns) : '';
   document.getElementById('edit-mobile-col').max = layer.settings.targetColumns;
   
-  // [수정] aspectRatio 로직 수정
   const hasRatio = !!module.aspectRatio;
   document.getElementById('edit-aspect-ratio').checked = hasRatio;
-  updateAspectRatioLabel(module); // 라벨 텍스트 업데이트
+  updateAspectRatioLabel(module); 
 
   document.getElementById('edit-color').value = module.color || '#8c6c3c';
   const isTransparent = module.transparent || false;
