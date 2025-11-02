@@ -25,7 +25,6 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
 
 /* --- 레이어 패널 스타일 --- */
 #layer-list { list-style: none; max-height: 250px; overflow-y: auto; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; }
-/* [수정] user-select 제거 */
 .layer-item { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #e5e7eb; cursor: pointer; }
 .layer-item:last-child { border-bottom: none; }
 .layer-item.active { background: #eff6ff; }
@@ -35,8 +34,6 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
 .layer-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 4px; line-height: 1; }
 .layer-btn:hover { background: #e5e7eb; }
 .layer-item.locked .layer-btn-lock { color: #3b82f6; }
-
-/* [삭제] .layer-item.dragging, .layer-drag-handle 관련 스타일 모두 삭제 */
 
 /* [신규] 레이어 우선순위 입력란 스타일 */
 .layer-priority {
