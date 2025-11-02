@@ -771,7 +771,7 @@ ${innerContent}
 function generateCSS() {
   let css = `body {
   margin: 0;
-  background: whitesmoke;
+  background: whitespoke;
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   padding: ${layers.length > 0 ? getSortedLayers()[0].settings.desktopGap : 10}px;
 }
@@ -792,8 +792,9 @@ function generateCSS() {
   pointer-events: auto; 
 }
 
+/* [수정] min-height: 60px 삭제 (style.css에서 직접 수정 권장) */
 .module {
-  min-height: 60px;
+  /* min-height: 60px; */ /* <- 이 줄이 삭제됨 */
 }
 .module.type-image { background: #e0e0e0; }
 .module.type-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -901,7 +902,7 @@ function generateCSS() {
 }
 
 
-// === [수정] UI 컨트롤 및 이벤트 핸들러 (버그 픽스, aspectRatio, fontWeight) ===
+// === [수정] UI 컨트롤 및 이벤트 핸들러 (텍스트 입력 버그 수정) ===
 
 function init() {
   function addSettingsListener(elementId, eventType, settingKey, valueFn, doSaveState = false, doRender = true) {
@@ -948,7 +949,12 @@ function init() {
       const moduleInfo = getSelectedModule();
       if (moduleInfo) {
         moduleInfo.module[property] = valueFn(e, moduleInfo.layer, moduleInfo.module); 
-        renderCanvas(); // [수정] 텍스트 입력 즉시 반영을 위해 renderCanvas() 호출 보장
+        
+        // [수정] 텍스트 내용 외의 것들만 즉시 렌더링 (텍스트는 별도 처리)
+        if (property !== 'textContent') {
+          renderCanvas();
+        }
+        
         if(property === 'col' || property === 'mobileCol') updateMobileSpanHint();
         if(property === 'type') updateEditPanel();
         
@@ -973,10 +979,22 @@ function init() {
   addEditListener('edit-font-size', 'change', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100), true);
   addEditListener('edit-font-weight', 'change', 'fontWeight', e => e.target.value, true);
   
-  // [수정] 텍스트 입력 'input' 리스너가 'change'와 동일하게 saveState만 false로 작동하도록 보장
-  addEditListener('edit-text-content', 'input', 'textContent', e => e.target.value, false);
-  addEditListener('edit-text-content', 'change', 'textContent', e => e.target.value, true);
-  
+  // [수정] 텍스트 입력 버그 수정을 위해 'edit-text-content' 리스너를 분리
+  document.getElementById('edit-text-content').addEventListener('input', (e) => {
+    const moduleInfo = getSelectedModule();
+    if (moduleInfo) {
+      moduleInfo.module.textContent = e.target.value;
+      renderCanvas(); // ★★★ 실시간 렌더링
+    }
+  });
+  document.getElementById('edit-text-content').addEventListener('change', (e) => {
+    const moduleInfo = getSelectedModule();
+    if (moduleInfo) {
+      moduleInfo.module.textContent = e.target.value;
+      saveState(); // ★★★ 변경 완료 시 저장
+    }
+  });
+
   addEditListener('edit-col', 'input', 'col', (e, layer) => clamp(parseInt(e.target.value) || 1, 1, layer.settings.desktopColumns));
   addEditListener('edit-col', 'change', 'col', (e, layer) => clamp(parseInt(e.target.value) || 1, 1, layer.settings.desktopColumns), true);
   addEditListener('edit-row', 'input', 'row', e => clamp(parseInt(e.target.value) || 1, 1, 99));
