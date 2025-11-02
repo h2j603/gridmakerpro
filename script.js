@@ -155,7 +155,7 @@ function renderLayersList() {
 }
 
 
-// === [수정] 캔버스 렌더링 (Box/Text 통합) ===
+// === [수정] 캔버스 렌더링 (Box/Text 통합 + fontWeight) ===
 function renderCanvas() {
   const viewport = document.getElementById('canvas-viewport');
   if (!viewport) return;
@@ -207,6 +207,7 @@ function renderCanvas() {
           text-align: ${moduleData.textAlign || 'left'};
           color: ${moduleData.fontColor || '#000000'};
           font-size: ${moduleData.fontSize ? moduleData.fontSize + 'px' : '14px'};
+          font-weight: ${moduleData.fontWeight || '400'}; 
           width: 100%; 
           margin: 0; 
         `;
@@ -220,6 +221,7 @@ function renderCanvas() {
       
       const selectedClass = (showSelection && isSelected) ? 'selected' : '';
       const groupedClass = (showSelection && selectedGroupId && moduleData.groupId === selectedGroupId && !isSelected) ? 'grouped' : '';
+      // [수정] aspectRatio 로직 수정
       const aspectStyle = moduleData.aspectRatio ? `aspect-ratio: ${moduleData.aspectRatio};` : '';
 
       // [수정] background 스타일이 box일 때만 적용되도록 수정
@@ -408,7 +410,7 @@ function toggleLayerLock(event, layerId) {
 }
 
 
-// === [수정] 모듈 관리 함수 (Box/Text 통합) ===
+// === [수정] 모듈 관리 함수 (Box/Text 통합 + fontWeight) ===
 
 function addCustomModule() {
   const layer = getActiveLayer();
@@ -434,7 +436,8 @@ function addCustomModule() {
     textAlign: 'left',
     verticalAlign: 'flex-start',
     fontColor: '#000000',
-    fontSize: null 
+    fontSize: null,
+    fontWeight: '400' // [신규] 폰트 굵기 기본값
   };
   
   layer.modules.push(newModule);
@@ -550,6 +553,8 @@ function splitSelectedModule() {
       if (r > 0 || c > 0) {
         newModule.textContent = '';
       }
+      // [수정] 분할 시 비율 고정은 해제
+      newModule.aspectRatio = null;
       newModules.push(newModule);
       newModuleIds.push(newModule.id);
     }
@@ -751,7 +756,7 @@ function handleDocumentTouchEnd(event) {
     document.removeEventListener('touchend', handleDocumentTouchEnd);
 }
 
-// === [수정] 코드 생성 (Box/Text 통합) ===
+// === [수정] 코드 생성 (Box/Text 통합 + fontWeight) ===
 
 function generateHTML() {
   let html = `<!DOCTYPE html>
@@ -801,7 +806,7 @@ ${innerContent}
 function generateCSS() {
   let css = `body {
   margin: 0;
-  background: whitesmoke;
+  background: whitespoke;
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   padding: ${layers.length > 0 ? getSortedLayers()[0].settings.desktopGap : 10}px;
 }
@@ -862,6 +867,7 @@ function generateCSS() {
       const bg = m.transparent ? 'transparent' : (m.color || '#8c6c3c');
       const outline = m.borderWidth > 0 ? `\n  outline: ${m.borderWidth}px solid ${m.borderColor};\n  outline-offset: -${m.borderWidth}px;` : '';
       const bgStyle = (m.type === 'box' || !m.type) ? `background: ${bg};` : '';
+      // [수정] aspectRatio 로직 수정
       const aspect = m.aspectRatio ? `\n  aspect-ratio: ${m.aspectRatio};` : '';
 
       let moduleSpecificStyles = '';
@@ -883,6 +889,7 @@ function generateCSS() {
   text-align: ${m.textAlign || 'left'};
   color: ${m.fontColor || '#000000'};
   font-size: ${m.fontSize ? m.fontSize + 'px' : '14px'};
+  font-weight: ${m.fontWeight || '400'};
 }\n`;
       }
     });
@@ -925,7 +932,7 @@ function generateCSS() {
 }
 
 
-// === [수정] UI 컨트롤 및 이벤트 핸들러 (버그 픽스 및 통합) ===
+// === [수정] UI 컨트롤 및 이벤트 핸들러 (버그 픽스, aspectRatio, fontWeight) ===
 
 function init() {
   function addSettingsListener(elementId, eventType, settingKey, valueFn, doSaveState = false, doRender = true) {
@@ -974,10 +981,17 @@ function init() {
     document.getElementById(elementId).addEventListener(eventType, e => {
       const moduleInfo = getSelectedModule();
       if (moduleInfo) {
-        moduleInfo.module[property] = valueFn(e, moduleInfo.layer); 
+        moduleInfo.module[property] = valueFn(e, moduleInfo.layer, moduleInfo.module); 
         renderCanvas();
         if(property === 'col' || property === 'mobileCol') updateMobileSpanHint();
-        if(property === 'type') updateEditPanel(); // [수정] 타입 변경 시 패널 업데이트
+        if(property === 'type') updateEditPanel();
+        
+        // [수정] col 또는 row 변경 시 aspectRatio 업데이트
+        if ((property === 'col' || property === 'row') && moduleInfo.module.aspectRatio) {
+          moduleInfo.module.aspectRatio = `${moduleInfo.module.col} / ${moduleInfo.module.row}`;
+          updateAspectRatioLabel(moduleInfo.module);
+        }
+        
         if (doSaveState) saveState();
       }
     });
@@ -993,6 +1007,7 @@ function init() {
   addEditListener('edit-font-color', 'change', 'fontColor', e => e.target.value, true);
   addEditListener('edit-font-size', 'input', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100));
   addEditListener('edit-font-size', 'change', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100), true);
+  addEditListener('edit-font-weight', 'change', 'fontWeight', e => e.target.value, true); // [신규] 폰트 굵기 리스너
   addEditListener('edit-text-content', 'input', 'textContent', e => e.target.value);
   addEditListener('edit-text-content', 'change', 'textContent', e => e.target.value, true);
   
@@ -1002,7 +1017,14 @@ function init() {
   addEditListener('edit-row', 'change', 'row', e => clamp(parseInt(e.target.value) || 1, 1, 99), true);
   addEditListener('edit-mobile-col', 'input', 'mobileCol', (e, layer) => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, layer.settings.targetColumns));
   addEditListener('edit-mobile-col', 'change', 'mobileCol', (e, layer) => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, layer.settings.targetColumns), true);
-  addEditListener('edit-aspect-ratio', 'change', 'aspectRatio', e => e.target.checked ? '1 / 1' : null, true);
+  
+  // [수정] aspectRatio 로직 수정
+  addEditListener('edit-aspect-ratio', 'change', 'aspectRatio', (e, layer, module) => {
+    const newRatio = e.target.checked ? `${module.col} / ${module.row}` : null;
+    updateAspectRatioLabel(module, newRatio); // 라벨 즉시 업데이트
+    return newRatio;
+  }, true);
+
   addEditListener('edit-color', 'input', 'color', e => e.target.value);
   addEditListener('edit-color', 'change', 'color', e => e.target.value, true);
   addEditListener('edit-border-color', 'input', 'borderColor', e => e.target.value);
@@ -1033,7 +1055,19 @@ function loadSettingsToUI(layer) {
   updateMobileSpanHint();
 }
 
-// [수정] 텍스트 패널 표시/숨기기 (Box/Text 통합)
+// [수정] aspectRatio 라벨 업데이트 함수
+function updateAspectRatioLabel(module, newRatio) {
+  const label = document.getElementById('edit-aspect-ratio-label');
+  const ratio = newRatio !== undefined ? newRatio : module.aspectRatio; // 즉각적인 값 반영
+  
+  if (ratio) {
+    label.textContent = `비율 고정 (${ratio.replace(/\s/g, '')})`;
+  } else {
+    label.textContent = `비율 고정`;
+  }
+}
+
+// [수정] 텍스트 패널 (fontWeight, aspectRatio)
 function updateEditPanel() {
   const panel = document.getElementById('edit-panel');
   const moduleInfo = getSelectedModule();
@@ -1057,6 +1091,7 @@ function updateEditPanel() {
     document.getElementById('edit-vertical-align').value = module.verticalAlign || 'flex-start';
     document.getElementById('edit-font-color').value = module.fontColor || '#000000';
     document.getElementById('edit-font-size').value = module.fontSize || ''; 
+    document.getElementById('edit-font-weight').value = module.fontWeight || '400'; // [신규] 폰트 굵기 로드
     document.getElementById('edit-text-content').value = module.textContent || '';
   } else { // 'image' 타입일 때 숨김
     textOptionsPanel.style.display = 'none';
@@ -1067,7 +1102,12 @@ function updateEditPanel() {
   document.getElementById('edit-row').value = module.row;
   document.getElementById('edit-mobile-col').value = module.mobileCol !== null ? clamp(module.mobileCol, 1, layer.settings.targetColumns) : '';
   document.getElementById('edit-mobile-col').max = layer.settings.targetColumns;
-  document.getElementById('edit-aspect-ratio').checked = (module.aspectRatio === '1 / 1');
+  
+  // [수정] aspectRatio 로직 수정
+  const hasRatio = !!module.aspectRatio;
+  document.getElementById('edit-aspect-ratio').checked = hasRatio;
+  updateAspectRatioLabel(module); // 라벨 텍스트 업데이트
+
   document.getElementById('edit-color').value = module.color || '#8c6c3c';
   const isTransparent = module.transparent || false;
   document.getElementById('edit-transparent').checked = isTransparent;
