@@ -35,7 +35,6 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
 .layer-btn:hover { background: #e5e7eb; }
 .layer-item.locked .layer-btn-lock { color: #3b82f6; }
 
-/* [신규] 레이어 우선순위 입력란 스타일 */
 .layer-priority {
   width: 40px;
   margin-right: 8px;
@@ -43,7 +42,7 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
   text-align: center;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  -moz-appearance: textfield; /* Firefox 화살표 숨기기 */
+  -moz-appearance: textfield; 
 }
 .layer-priority:focus {
   outline: 1px solid #3b82f6;
@@ -51,7 +50,7 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
 }
 .layer-priority::-webkit-outer-spin-button,
 .layer-priority::-webkit-inner-spin-button {
-  -webkit-appearance: none; /* Chrome/Safari 화살표 숨기기 */
+  -webkit-appearance: none; 
   margin: 0;
 }
 
@@ -89,7 +88,8 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
 }
 
 /* --- 모듈 스타일 --- */
-.module { background: #8c6c3c; border-radius: 0; min-height: 60px; cursor: pointer; position: relative; border: 2px solid transparent; transition: all 0.2s; overflow: hidden; }
+/* [수정] min-height: 60px 삭제 */
+.module { background: #8c6c3c; border-radius: 0; cursor: pointer; position: relative; border: 2px solid transparent; transition: all 0.2s; overflow: hidden; }
 .active-layer .module:hover { border-color: #3b82f6; transform: translateY(-2px); }
 .module.selected { border-color: #ef4444; border-width: 3px; }
 .module.grouped { box-shadow: 0 0 0 2px #a5b4fc inset; }
@@ -112,19 +112,15 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
   padding: 30px 10px 10px; 
   font-size: 14px;
   color: #333;
-  /* [신규] 텍스트 줄바꿈 적용 */
   white-space: pre-wrap;
   word-break: break-word;
 }
 .module-content.image { padding: 0; width: 100%; height: 100%; object-fit: cover; }
 .module[data-type="image"] { background: #e0e0e0; }
-/* [수정] data-type="text" -> "box" 로 통합 */
 .module[data-type="box"] .module-content {
   padding: 0;
 }
 
-
-/* .canvas-viewport.selection-hidden ... */
 .canvas-viewport.selection-hidden .active-layer .module:hover {
   border-color: transparent; 
   transform: none; 
