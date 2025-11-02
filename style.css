@@ -118,11 +118,11 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
 }
 .module-content.image { padding: 0; width: 100%; height: 100%; object-fit: cover; }
 .module[data-type="image"] { background: #e0e0e0; }
-.module[data-type="text"] { background: #ffffff; border: 1px solid #e0e0e0; }
-.module[data-type="text"]:hover { border-color: #3b82f6; }
-.module[data-type="text"] .module-content {
+/* [수정] data-type="text" -> "box" 로 통합 */
+.module[data-type="box"] .module-content {
   padding: 0;
 }
+
 
 /* .canvas-viewport.selection-hidden ... */
 .canvas-viewport.selection-hidden .active-layer .module:hover {
