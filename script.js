@@ -1,16 +1,16 @@
 // --- [신규] 글로벌 상태 변수 ---
-let layers = []; // { id, name, modules, desktopOrder, mobileOrder, isVisible, isLocked, settings }
+let layers = []; 
 let activeLayerId = null;
 let selectedModuleId = null;
 
 // --- [수정] 글로벌 설정 (공통 뷰 상태) ---
 let currentView = 'desktop', activeTab = 'html';
 let showSelection = true;
-let dimInactiveLayers = true; // [신규] 비활성 레이어 흐리게 보기 (기본값 true)
+let dimInactiveLayers = true; 
 
 // --- [신규] 드래그 상태 변수 ---
-let draggedModuleInfo = null; // { layerId, moduleId, moduleIndexInOrder }
-let draggedLayerId = null; // [신규] 레이어 드래그용
+let draggedModuleInfo = null; 
+let draggedLayerId = null; 
 
 // --- [신규] 히스토리 변수 (레이어 구조 전체 저장) ---
 let history = [];
@@ -36,7 +36,7 @@ function getSelectedModule() {
     selectedModuleId = null;
     return null;
   }
-  return { module, layer }; // [수정] 모듈과 레이어를 함께 반환
+  return { module, layer }; 
 }
 
 // --- [신규] 헬퍼: Clamp ---
@@ -75,8 +75,8 @@ function loadState(state) {
       activeLayerId = layers[layers.length - 1].id;
   }
   
-  renderAll(); // 모든 UI 다시 그리기
-  loadSettingsToUI(getActiveLayer()); // [신규] 불러온 활성 레이어의 설정을 UI에 로드
+  renderAll(); 
+  loadSettingsToUI(getActiveLayer()); 
   updateEditPanel();
   updateUndoRedoButtons();
 }
@@ -110,17 +110,22 @@ function renderAll() {
 }
 
 // === [신규] 레이어 패널 렌더링 (수정) ===
+// [수정] data-layer-id 및 ontouch... 이벤트 핸들러 추가
 function renderLayersList() {
   const list = document.getElementById('layer-list');
   if (!list) return;
   list.innerHTML = layers.map(layer => `
     <li class="layer-item ${layer.id === activeLayerId ? 'active' : ''} ${layer.isLocked ? 'locked' : ''}" 
         onclick="activateLayer(${layer.id})"
+        data-layer-id="${layer.id}"
         draggable="true"
         ondragstart="handleLayerDragStart(event, ${layer.id})"
         ondragover="handleLayerDragOver(event)"
         ondrop="handleLayerDrop(event, ${layer.id})"
-        ondragend="handleLayerDragEnd(event)">
+        ondragend="handleLayerDragEnd(event)"
+        ontouchstart="handleLayerTouchStart(event, ${layer.id})"
+        ontouchmove="handleLayerTouchMove(event)"
+        ontouchend="handleLayerTouchEnd(event)">
       <button class="layer-btn" onclick="toggleLayerVisibility(event, ${layer.id})">
         ${layer.isVisible ? '👁️' : '🙈'}
       </button>
@@ -144,45 +149,33 @@ function renderCanvas() {
   const scaleValue = parseInt(document.getElementById('canvas-scale').value);
   viewport.style.transform = `scale(${scaleValue / 100})`;
   viewport.classList.toggle('mobile-view', currentView === 'mobile');
-  
-  // [신규] 선택/호버 UI 숨김 클래스 토글 (편의용 윤곽선 숨기기)
   viewport.classList.toggle('selection-hidden', !showSelection);
   
   const selectedModuleInfo = getSelectedModule();
   const selectedGroupId = (selectedModuleInfo && selectedModuleInfo.module.groupId) ? selectedModuleInfo.module.groupId : null;
 
-  // [중요] 레이어 순서(Z-index)는 'layers' 배열 순서대로 렌더링되어 결정됨
-  // (배열의 마지막 항목이 DOM에서 마지막에 그려져 가장 위에 보임)
   viewport.innerHTML = layers.map(layer => {
     if (!layer.isVisible) return `<div class="grid-container hidden" id="grid-${layer.id}"></div>`;
     
-    // [수정] 각 레이어의 개별 설정을 읽어옴
     const { settings } = layer;
     const columns = currentView === 'desktop' ? settings.desktopColumns : settings.targetColumns;
     const gap = currentView === 'desktop' ? settings.desktopGap : settings.mobileGap;
-    
     const isActive = layer.id === activeLayerId;
     const isLocked = layer.isLocked;
-    
-    // [신규] 비활성 레이어 흐리게 처리 로직
     const opacityStyle = (!isActive && dimInactiveLayers) ? 'opacity: 0.4;' : '';
-    
     const order = currentView === 'desktop' ? layer.desktopOrder : layer.mobileOrder;
     const orderedModules = order.map(id => layer.modules.find(m => m.id === id)).filter(m => m);
 
     const modulesHTML = orderedModules.map((moduleData, i) => {
       const isSelected = isActive && moduleData.id === selectedModuleId;
-      
       const isTransparent = moduleData.transparent || false;
       const bgColor = isTransparent ? 'transparent' : (moduleData.color || '#8c6c3c');
       const borderWidth = moduleData.borderWidth || 0;
       const borderColor = moduleData.borderColor || '#000000';
       const outlineStyle = borderWidth > 0 ? `outline: ${borderWidth}px solid ${borderColor}; outline-offset: -${borderWidth}px;` : '';
-      
       const desktopColSpan = clamp(moduleData.col, 1, settings.desktopColumns);
       const mobileColSpan = getMobileSpan(moduleData, layer);
       const col = currentView === 'desktop' ? desktopColSpan : mobileColSpan;
-      
       const showWarning = currentView === 'mobile' && 
                           moduleData.col > settings.targetColumns && 
                           (moduleData.mobileCol === null || moduleData.mobileCol === undefined || moduleData.mobileCol === '');
@@ -192,7 +185,6 @@ function renderCanvas() {
       if (moduleType === 'text') { innerHTML = `<p class="module-content">Lorem ipsum...</p>`; } 
       else if (moduleType === 'image') { innerHTML = `<img src="https://via.placeholder.com/${desktopColSpan * 100}x${moduleData.row * 50}" alt="placeholder" class="module-content image">`; }
       
-      // [수정] showSelection 변수에 의해 .selected, .grouped 클래스 제어
       const selectedClass = (showSelection && isSelected) ? 'selected' : '';
       const groupedClass = (showSelection && selectedGroupId && moduleData.groupId === selectedGroupId && !isSelected) ? 'grouped' : '';
       const aspectStyle = moduleData.aspectRatio ? `aspect-ratio: ${moduleData.aspectRatio};` : '';
@@ -202,6 +194,7 @@ function renderCanvas() {
            style="grid-column: span ${col}; grid-row: span ${moduleData.row}; background: ${moduleType === 'box' ? bgColor : ''}; ${outlineStyle} ${aspectStyle}"
            data-type="${moduleType}"
            data-group-id="${moduleData.groupId || ''}"
+           data-module-info="${layer.id},${moduleData.id},${i}"
            onclick="selectModule(${layer.id}, ${moduleData.id})"
            ondragover="handleDragOver(event)"
            ondrop="handleDrop(${layer.id}, ${i}, event)">
@@ -212,14 +205,17 @@ function renderCanvas() {
         <div class="module-drag-handle" 
              draggable="true" 
              ondragstart="handleDragStart(${layer.id}, ${moduleData.id}, ${i}, event)" 
-             ondragend="handleDragEnd(event)">⠿</div>
+             ondragend="handleDragEnd(event)"
+             ontouchstart="handleModuleTouchStart(event, ${layer.id}, ${moduleData.id}, ${i})"
+             ontouchmove="handleModuleTouchMove(event)"
+             ontouchend="handleModuleTouchEnd(event)">⠿</div>
       </div>
     `}).join('');
     
     return `
       <div class="grid-container ${isActive ? 'active-layer' : ''} ${isLocked ? 'locked' : ''} ${!layer.isVisible ? 'hidden' : ''}"
            id="grid-${layer.id}"
-           style="grid-template-columns: repeat(${columns}, 1fr); gap: ${gap}px; mix-blend-mode: ${layer.settings.blendMode || 'normal'}; ${opacityStyle}"
+           style="grid-template-columns: repeat(${columns}, 1fr); gap: ${gap}px; mix-blend-mode: ${layer.settings.blendMode || 'normal'}; ${opacityStyle}; isolation: isolate;"
            ondragover="${isActive && !isLocked ? 'handleDragOver(event)' : ''}"
            ondrop="${isActive && !isLocked ? 'handleDrop(${layer.id}, null, event)' : ''}">
         ${modulesHTML}
@@ -228,17 +224,21 @@ function renderCanvas() {
   }).join('');
 }
 
-// === [신규] 레이어 드래그 앤 드롭 핸들러 ===
+// === [신규] 레이어 드래그 앤 드롭 핸들러 (마우스) ===
 function handleLayerDragStart(event, layerId) {
     event.stopPropagation();
     draggedLayerId = layerId;
     event.target.classList.add('dragging');
-    event.dataTransfer.effectAllowed = 'move';
+    if(event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+    }
 }
 
 function handleLayerDragOver(event) {
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+    if(event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
 }
 
 function handleLayerDrop(event, targetLayerId) {
@@ -248,7 +248,6 @@ function handleLayerDrop(event, targetLayerId) {
     
     if (draggedLayerId === null || draggedLayerId === targetLayerId) {
         draggedLayerId = null;
-        // 드래그가 끝났으니 모든 .dragging 클래스 제거
         document.querySelectorAll('.layer-item.dragging').forEach(el => el.classList.remove('dragging'));
         return;
     }
@@ -258,14 +257,11 @@ function handleLayerDrop(event, targetLayerId) {
 
     if (draggedIndex === -1 || targetIndex === -1) return;
 
-    // [중요] 배열에서 드래그한 레이어 제거
     const [draggedLayer] = layers.splice(draggedIndex, 1);
-    // 타겟 위치에 다시 삽입
     layers.splice(targetIndex, 0, draggedLayer);
 
     draggedLayerId = null;
     
-    // UI(목록) 순서와 캔버스(DOM/Z-index) 순서를 모두 갱신
     renderLayersList(); 
     renderCanvas();     
     updateCode();
@@ -273,9 +269,39 @@ function handleLayerDrop(event, targetLayerId) {
 }
 
 function handleLayerDragEnd(event) {
-    // 드롭이 유효하지 않은 곳에서 일어났을 때 .dragging 클래스 제거
     event.target.classList.remove('dragging');
     draggedLayerId = null;
+}
+
+// === [신규] 레이어 터치 드래그 핸들러 (모바일) ===
+function handleLayerTouchStart(event, layerId) {
+    event.stopPropagation();
+    draggedLayerId = layerId;
+    event.target.closest('.layer-item').classList.add('dragging');
+}
+
+function handleLayerTouchMove(event) {
+    if (!draggedLayerId) return;
+    event.preventDefault(); // [중요] 스크롤 및 텍스트 선택(긁힘) 방지
+}
+
+function handleLayerTouchEnd(event) {
+    if (!draggedLayerId) return;
+    event.stopPropagation();
+
+    // 터치가 끝난 지점의 요소를 찾음
+    const touch = event.changedTouches[0];
+    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+    const targetLi = targetElement ? targetElement.closest('.layer-item[data-layer-id]') : null;
+
+    if (targetLi) {
+        const targetLayerId = parseInt(targetLi.dataset.layerId);
+        handleLayerDrop(event, targetLayerId); // 드롭 로직 재사용
+    } else {
+        // 드롭에 실패하면 드래그 취소
+        document.querySelectorAll('.layer-item.dragging').forEach(el => el.classList.remove('dragging'));
+        draggedLayerId = null;
+    }
 }
 
 // === [신규] 레이어 관리 함수 ===
@@ -295,11 +321,11 @@ function addLayer() {
       targetColumns: 2,
       mobileGap: 10,
       mobileOrderLocked: false,
-      blendMode: 'normal' // [신규] 블렌드 모드 추가
+      blendMode: 'normal' 
     }
   };
   layers.push(newLayer);
-  activateLayer(newLayer.id); // 새 레이어를 활성화 (내부에서 saveState 호출)
+  activateLayer(newLayer.id); 
   showToast(`${newName} 추가됨`);
 }
 
@@ -316,7 +342,7 @@ function deleteActiveLayer() {
     selectedModuleId = null;
 
     renderAll();
-    loadSettingsToUI(getActiveLayer()); // [신규] 새 활성 레이어 설정 로드
+    loadSettingsToUI(getActiveLayer()); 
     updateEditPanel();
     saveState();
     showToast(`레이어 삭제됨`);
@@ -473,7 +499,6 @@ function deleteSelectedModule() {
   deleteModule(moduleInfo.layer.id, moduleInfo.module.id, new Event('click'));
 }
 
-// [수정] 나누어 떨어지지 않아도 분할되도록 로직 변경
 function splitSelectedModule() {
   const moduleInfo = getSelectedModule();
   if (!moduleInfo) { showToast('분할할 모듈을 먼저 선택하세요.'); return; }
@@ -486,9 +511,6 @@ function splitSelectedModule() {
 
   if (h === 1 && v === 1) return;
 
-  // [신규] 나누어 떨어지지 않는 경우를 대비한 로직
-  // 예: 5컬럼을 2(h)로 나누면 -> baseCol=2, remainderCol=1
-  // -> 1개는 (2+1)=3컬럼, 1개는 2컬럼
   const baseCol = Math.floor(module.col / h);
   const remainderCol = module.col % h;
   const baseRow = Math.floor(module.row / v);
@@ -498,14 +520,10 @@ function splitSelectedModule() {
   let newModules = [];
   let newModuleIds = [];
 
-  for (let r = 0; r < v; r++) { // 세로(v) 루프
-    // 남는 로우(remainderRow)가 있으면 앞쪽 모듈부터 1씩 더해줌
+  for (let r = 0; r < v; r++) { 
     const newRow = baseRow + (r < remainderRow ? 1 : 0);
-    
-    for (let c = 0; c < h; c++) { // 가로(h) 루프
-      // 남는 컬럼(remainderCol)이 있으면 앞쪽 모듈부터 1씩 더해줌
+    for (let c = 0; c < h; c++) { 
       const newCol = baseCol + (c < remainderCol ? 1 : 0);
-      
       const newModule = {
         ...deepCopy(module), 
         id: Date.now() + (r * h + c),
@@ -514,11 +532,10 @@ function splitSelectedModule() {
         groupId: newGroupId,
       };
       newModules.push(newModule);
-      newModuleIds.push(newModule.id);
+      newModuleIds.push(newModules[i].id);
     }
   }
 
-  // [기존] 모듈 교체 로직 (이 부분은 동일)
   const originalIndex = layer.modules.findIndex(m => m.id === module.id);
   if (originalIndex > -1) { layer.modules.splice(originalIndex, 1, ...newModules); }
   const desktopOrderIndex = layer.desktopOrder.indexOf(module.id);
@@ -554,7 +571,7 @@ function clearActiveLayer() {
   }
 }
 
-// === [수정] 드래그 앤 드롭 (활성 레이어 내에서만) ===
+// === [수정] 모듈 드래그 앤 드롭 (마우스) ===
 
 function handleDragStart(layerId, moduleId, moduleIndexInOrder, event) {
   const layer = layers.find(l => l.id === layerId);
@@ -562,8 +579,10 @@ function handleDragStart(layerId, moduleId, moduleIndexInOrder, event) {
   
   draggedModuleInfo = { layerId, moduleId, moduleIndexInOrder };
   event.target.closest('.module').classList.add('dragging');
-  event.dataTransfer.effectAllowed = 'move';
-  event.dataTransfer.setData('text/plain', moduleId);
+  if(event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', moduleId);
+  }
 }
 
 function handleDragEnd(event) {
@@ -573,7 +592,9 @@ function handleDragEnd(event) {
 
 function handleDragOver(event) {
   event.preventDefault();
-  event.dataTransfer.dropEffect = 'move';
+  if(event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move';
+  }
 }
 
 function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
@@ -582,7 +603,7 @@ function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
   
   if (!draggedModuleInfo || draggedModuleInfo.layerId !== targetLayerId) {
       draggedModuleInfo = null;
-      return; // 다른 레이어 간 드롭 방지
+      return; 
   }
   
   const layer = layers.find(l => l.id === targetLayerId);
@@ -651,6 +672,51 @@ function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
   draggedModuleInfo = null;
 }
 
+// === [신규] 모듈 터치 드래그 핸들러 (모바일) ===
+function handleModuleTouchStart(event, layerId, moduleId, index) {
+    event.stopPropagation();
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer || layer.isLocked) { return; }
+    
+    draggedModuleInfo = { layerId, moduleId, moduleIndexInOrder: index };
+    event.target.closest('.module').classList.add('dragging');
+}
+
+function handleModuleTouchMove(event) {
+    if (!draggedModuleInfo) return;
+    event.preventDefault(); // [중요] 스크롤 및 텍스트 선택(긁힘) 방지
+}
+
+function handleModuleTouchEnd(event) {
+    if (!draggedModuleInfo) return;
+    event.stopPropagation();
+
+    // 터치가 끝난 지점의 요소를 찾음
+    const touch = event.changedTouches[0];
+    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+
+    const targetModule = targetElement ? targetElement.closest('.module[data-module-info]') : null;
+    const targetGrid = targetElement ? targetElement.closest('.grid-container[id^="grid-"]') : null;
+
+    let dropped = false;
+    if (targetModule) {
+        // [레이어ID, 모듈ID, 인덱스]
+        const moduleInfo = targetModule.dataset.moduleInfo.split(',').map(Number);
+        const targetLayerId = moduleInfo[0];
+        const targetModuleIndex = moduleInfo[2];
+        
+        handleDrop(event, targetLayerId, targetModuleIndex); // 드롭 로직 재사용
+        dropped = true;
+    } else if (targetGrid) {
+        // 모듈이 아닌 빈 그리드 영역에 드롭
+        const targetLayerId = parseInt(targetGrid.id.split('-')[1]);
+        handleDrop(event, targetLayerId, null); // 드롭 로직 재사용
+        dropped = true;
+    }
+
+    // 드롭이 성공했든 실패했든(허공에 드롭) 드래그 상태를 정리
+    handleDragEnd(event);
+}
 
 // === [수정] 코드 생성 (레이어별 설정 적용) ===
 
@@ -666,7 +732,6 @@ function generateHTML() {
   <div class="grid-viewport-wrapper">
 `;
 
-  // [중요] 레이어 배열 'layers' 순서대로 HTML 생성
   layers.filter(l => l.isVisible).forEach(layer => {
     html += `
     <div class="grid-container" id="grid-layer-${layer.id}">
@@ -706,12 +771,13 @@ function generateCSS() {
   top: 0;
   left: 0;
   width: 100%;
-  pointer-events: none; /* 클릭 통과 */
+  pointer-events: none; 
 }
-.grid-container:last-of-type {
-  position: relative; /* 높이 차지 */
-  pointer-events: auto; /* 클릭 가능 */
+/* [수정] 'last-of-type' 핵 제거, 모든 레이어가 앱과 동일하게 동작하도록 */
+.grid-container .module {
+  pointer-events: auto; /* 모듈은 클릭 가능하게 */
 }
+
 .module {
   min-height: 60px;
 }
@@ -720,7 +786,6 @@ function generateCSS() {
 .module.type-text { background: #ffffff; padding: 10px; }
 `;
 
-  // [수정] 레이어 배열 'layers' 순서대로 CSS 생성 (Z-index에 영향)
   layers.filter(l => l.isVisible).forEach(layer => {
     const { settings } = layer;
     css += `
@@ -728,7 +793,8 @@ function generateCSS() {
 #grid-layer-${layer.id} {
   grid-template-columns: repeat(${settings.desktopColumns}, 1fr);
   gap: ${settings.desktopGap}px;
-  mix-blend-mode: ${settings.blendMode || 'normal'}; /* [신규] 블렌드 모드 */
+  mix-blend-mode: ${settings.blendMode || 'normal'};
+  isolation: isolate; /* [신규] 블렌딩 격리 */
 }
 `;
     layer.modules.forEach(m => {
@@ -751,6 +817,7 @@ function generateCSS() {
 @media (max-width: 768px) {
   .grid-container {
     position: relative;
+    width: 100%;
   }
 `;
 
@@ -785,7 +852,6 @@ function generateCSS() {
 // === [신규] UI 컨트롤 및 이벤트 핸들러 ===
 
 function init() {
-  // --- [신규] 설정 패널 리스너 (활성 레이어에 적용) ---
   function addSettingsListener(elementId, eventType, settingKey, valueFn, doSaveState = false, doRender = true) {
     document.getElementById(elementId).addEventListener(eventType, e => {
       const layer = getActiveLayer();
@@ -803,9 +869,7 @@ function init() {
     });
   }
   
-  // [신규] 레이어 블렌드 모드 리스너
   addSettingsListener('layer-blend-mode', 'change', 'blendMode', e => e.target.value, true);
-  
   addSettingsListener('columns', 'input', 'desktopColumns', e => clamp(parseInt(e.target.value) || 1, 1, 12));
   addSettingsListener('columns', 'change', 'desktopColumns', e => clamp(parseInt(e.target.value) || 1, 1, 12), true);
   addSettingsListener('gap', 'input', 'desktopGap', e => clamp(parseInt(e.target.value) || 0, 0, 50));
@@ -814,22 +878,18 @@ function init() {
   addSettingsListener('target-columns', 'change', 'targetColumns', e => clamp(parseInt(e.target.value) || 1, 1, 12), true);
   addSettingsListener('mobile-order-lock', 'change', 'mobileOrderLocked', e => e.target.checked, true, false); 
   
-  // 캔버스 배율
   document.getElementById('canvas-scale').addEventListener('input', renderCanvas);
   
-  // [수정] 선택 테두리/호버 숨기기 리스너
   document.getElementById('show-selection').addEventListener('change', e => {
     showSelection = e.target.checked;
-    renderCanvas(); // renderCanvas가 'selection-hidden' 클래스를 토글함
+    renderCanvas(); 
   });
   
-  // [신규] 비활성 레이어 흐리게 토글 핸들러
   document.getElementById('dim-inactive-layers').addEventListener('change', e => {
       dimInactiveLayers = e.target.checked;
       renderCanvas();
   });
   
-  // --- [신규] 모듈 편집 리스너 (선택된 모듈에 적용) ---
   function addEditListener(elementId, eventType, property, valueFn, doSaveState = false) {
     document.getElementById(elementId).addEventListener(eventType, e => {
       const moduleInfo = getSelectedModule();
@@ -858,18 +918,16 @@ function init() {
   addEditListener('edit-border-width', 'input', 'borderWidth', e => clamp(parseInt(e.target.value) || 0, 0, 20));
   addEditListener('edit-border-width', 'change', 'borderWidth', e => clamp(parseInt(e.target.value) || 0, 0, 20), true);
   
-  // --- 초기화 ---
   addLayer(); 
 }
 
-// [신규] 활성 레이어의 설정을 UI 패널에 로드하는 함수
 function loadSettingsToUI(layer) {
   if (!layer) {
       document.getElementById('columns').value = 6;
       document.getElementById('gap').value = 10;
       document.getElementById('target-columns').value = 2;
       document.getElementById('mobile-order-lock').checked = false;
-      document.getElementById('layer-blend-mode').value = 'normal'; // [신규]
+      document.getElementById('layer-blend-mode').value = 'normal'; 
       return;
   }
   const { settings } = layer;
@@ -877,7 +935,7 @@ function loadSettingsToUI(layer) {
   document.getElementById('gap').value = settings.desktopGap;
   document.getElementById('target-columns').value = settings.targetColumns;
   document.getElementById('mobile-order-lock').checked = settings.mobileOrderLocked;
-  document.getElementById('layer-blend-mode').value = settings.blendMode || 'normal'; // [신규]
+  document.getElementById('layer-blend-mode').value = settings.blendMode || 'normal'; 
   
   updateModeHint();
   updateMobileSpanHint();
