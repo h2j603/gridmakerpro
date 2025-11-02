@@ -10,7 +10,6 @@ let dimInactiveLayers = true;
 
 // --- [신규] 드래그 상태 변수 ---
 let draggedModuleInfo = null; 
-// [삭제] draggedLayerId = null; 
 
 // --- [신규] 히스토리 변수 (레이어 구조 전체 저장) ---
 let history = [];
@@ -156,7 +155,7 @@ function renderLayersList() {
 }
 
 
-// === [수정] 캔버스 렌더링 (텍스트/순서 적용) ===
+// === [수정] 캔버스 렌더링 (Box/Text 통합) ===
 function renderCanvas() {
   const viewport = document.getElementById('canvas-viewport');
   if (!viewport) return;
@@ -198,12 +197,13 @@ function renderCanvas() {
       
       let innerHTML = '';
       const moduleType = moduleData.type || 'box';
-
-      let textStyles = '';
       let moduleFlexStyles = '';
             
-      if (moduleType === 'text') { 
-        textStyles = `
+      if (moduleType === 'image') { 
+        innerHTML = `<img src="https://via.placeholder.com/${desktopColSpan * 100}x${moduleData.row * 50}" alt="placeholder" class="module-content image">`; 
+      } else { 
+        // [수정] 'box' 타입이 기본적으로 텍스트 컨테이너 역할을 함
+        const textStyles = `
           text-align: ${moduleData.textAlign || 'left'};
           color: ${moduleData.fontColor || '#000000'};
           font-size: ${moduleData.fontSize ? moduleData.fontSize + 'px' : '14px'};
@@ -215,20 +215,19 @@ function renderCanvas() {
           align-items: ${moduleData.verticalAlign || 'flex-start'};
           padding: 10px; 
         `;
-        // [수정] 텍스트 내용을 escapeHTML로 안전하게 렌더링
         innerHTML = `<p class="module-content" style="${textStyles}">${escapeHTML(moduleData.textContent)}</p>`; 
-      } 
-      else if (moduleType === 'image') { 
-        innerHTML = `<img src="https://via.placeholder.com/${desktopColSpan * 100}x${moduleData.row * 50}" alt="placeholder" class="module-content image">`; 
       }
       
       const selectedClass = (showSelection && isSelected) ? 'selected' : '';
       const groupedClass = (showSelection && selectedGroupId && moduleData.groupId === selectedGroupId && !isSelected) ? 'grouped' : '';
       const aspectStyle = moduleData.aspectRatio ? `aspect-ratio: ${moduleData.aspectRatio};` : '';
 
+      // [수정] background 스타일이 box일 때만 적용되도록 수정
+      const backgroundStyle = (moduleType === 'box') ? `background: ${bgColor};` : '';
+
       return `
       <div class="module ${selectedClass} ${groupedClass} ${showWarning ? 'warning' : ''}" 
-           style="grid-column: span ${col}; grid-row: span ${moduleData.row}; background: ${moduleType === 'box' ? bgColor : ''}; ${outlineStyle} ${aspectStyle} ${moduleFlexStyles}"
+           style="grid-column: span ${col}; grid-row: span ${moduleData.row}; ${backgroundStyle} ${outlineStyle} ${aspectStyle} ${moduleFlexStyles}"
            data-type="${moduleType}"
            data-group-id="${moduleData.groupId || ''}"
            data-module-info="${layer.id},${moduleData.id},${i}"
@@ -261,8 +260,7 @@ function renderCanvas() {
 }
 
 // === [삭제] 레이어 드래그 앤 드롭 핸들러 (모두 삭제) ===
-// handleLayerDragStart, handleLayerDragOver, handleLayerDrop, handleLayerDragEnd
-// handleLayerTouchStart, handleDocumentTouchMove, handleDocumentTouchEnd
+// (기존 코드와 동일하게 삭제됨)
 
 // === [신규] 레이어 우선순위 관리 함수 ===
 function updateLayerPriority(event, layerId) {
@@ -323,10 +321,9 @@ function addLayer() {
     }
   };
   layers.push(newLayer);
-  // [수정] 정규화 호출 (필요시)
-  // normalizeLayerPriorities(); // 새 레이어는 그냥 맨 뒤에 추가되므로 정규화 불필요
   
   activateLayer(newLayer.id); 
+  saveState(); // [수정] Undo를 위해 saveState() 호출
   showToast(`${newName} 추가됨`);
 }
 
@@ -411,7 +408,7 @@ function toggleLayerLock(event, layerId) {
 }
 
 
-// === [수정] 모듈 관리 함수 (텍스트 속성 추가) ===
+// === [수정] 모듈 관리 함수 (Box/Text 통합) ===
 
 function addCustomModule() {
   const layer = getActiveLayer();
@@ -424,7 +421,7 @@ function addCustomModule() {
   const transparent = document.getElementById('custom-transparent').checked;
   const borderColor = document.getElementById('custom-border-color').value;
   const borderWidth = clamp(parseInt(document.getElementById('custom-border-width').value) || 0, 0, 20);
-  const type = document.getElementById('custom-type').value; 
+  const type = document.getElementById('custom-type').value; // 'box' 또는 'image'
   
   const newModule = { 
     col, row, color, transparent, borderColor, borderWidth, 
@@ -432,8 +429,8 @@ function addCustomModule() {
     type: type, 
     groupId: null,
     aspectRatio: null,
-    // [신규] 텍스트 속성 기본값
-    textContent: 'Lorem ipsum...', // [수정]
+    // [수정] Box 타입도 텍스트 속성을 가짐 (기본값)
+    textContent: '', // 'Lorem ipsum...' -> ''
     textAlign: 'left',
     verticalAlign: 'flex-start',
     fontColor: '#000000',
@@ -523,6 +520,12 @@ function splitSelectedModule() {
 
   if (h === 1 && v === 1) return;
 
+  // [수정] 분할 버그 방지 (0-span 생성 금지)
+  if (h > module.col || v > module.row) {
+    showToast(`모듈 크기(${module.col}x${module.row})보다 더 잘게 쪼갤 수 없습니다.`);
+    return;
+  }
+
   const baseCol = Math.floor(module.col / h);
   const remainderCol = module.col % h;
   const baseRow = Math.floor(module.row / v);
@@ -543,6 +546,10 @@ function splitSelectedModule() {
         row: newRow, 
         groupId: newGroupId,
       };
+      // [수정] 분할된 첫 번째 모듈만 텍스트를 유지하고 나머지는 비움
+      if (r > 0 || c > 0) {
+        newModule.textContent = '';
+      }
       newModules.push(newModule);
       newModuleIds.push(newModule.id);
     }
@@ -689,7 +696,7 @@ function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
   draggedModuleInfo = null;
 }
 
-// === [신규] 모듈 터치 드래그 핸들러 (모바일) ===
+// === [수정] 모듈 터치 드래그 핸들러 (모바일) ===
 function handleModuleTouchStart(event, layerId, moduleId, index) {
     event.stopPropagation();
     const layer = layers.find(l => l.id === layerId);
@@ -724,11 +731,13 @@ function handleDocumentTouchEnd(event) {
             const targetLayerId = moduleInfo[0];
             const targetModuleIndex = moduleInfo[2];
             
-            handleDrop(event, targetLayerId, targetModuleIndex); 
+            // [수정] handleDrop 인자 순서 버그 수정
+            handleDrop(targetLayerId, targetModuleIndex, event); 
             dropped = true;
         } else if (targetGrid) {
             const targetLayerId = parseInt(targetGrid.id.split('-')[1]);
-            handleDrop(event, targetLayerId, null); 
+            // [수정] handleDrop 인자 순서 버그 수정
+            handleDrop(targetLayerId, null, event); 
             dropped = true;
         }
 
@@ -742,7 +751,7 @@ function handleDocumentTouchEnd(event) {
     document.removeEventListener('touchend', handleDocumentTouchEnd);
 }
 
-// === [수정] 코드 생성 (폰트 적용 및 텍스트/순서) ===
+// === [수정] 코드 생성 (Box/Text 통합) ===
 
 function generateHTML() {
   let html = `<!DOCTYPE html>
@@ -766,13 +775,16 @@ function generateHTML() {
       if (!m) return '';
       const groupClass = m.groupId ? ` group-${m.groupId}` : '';
       
-      // [수정] 텍스트 내용을 escape하여 <p> 태그에 삽입
-      const innerContent = m.type === 'text' 
-        ? `      <p>${escapeHTML(m.textContent)}</p>`
-        : (m.type === 'image' ? '      <img src="https://via.placeholder.com/150" alt="placeholder">' : '      ');
+      // [수정] Box/Text 통합
+      let innerContent = '';
+      if (m.type === 'image') {
+        innerContent = '      <img src="https://via.placeholder.com/150" alt="placeholder">';
+      } else if (m.type === 'box') {
+        innerContent = `      <p>${escapeHTML(m.textContent)}</p>`;
+      }
 
       return `    <div class="module module-${m.id} type-${m.type || 'box'}${groupClass}">
-  ${innerContent}
+${innerContent}
     </div>`;
     }).join('\n')}
     </div>
@@ -815,12 +827,14 @@ function generateCSS() {
 }
 .module.type-image { background: #e0e0e0; }
 .module.type-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.module.type-text { 
-  background: #ffffff; 
+
+/* [수정] .type-text -> .type-box 로 통합 */
+.module.type-box { 
+  /* 배경색은 인라인으로 적용됨 */
   display: flex;
   padding: 10px;
 }
-.module.type-text p {
+.module.type-box p {
   font-size: 14px;
   color: #000;
   width: 100%;
@@ -850,9 +864,9 @@ function generateCSS() {
       const bgStyle = (m.type === 'box' || !m.type) ? `background: ${bg};` : '';
       const aspect = m.aspectRatio ? `\n  aspect-ratio: ${m.aspectRatio};` : '';
 
-      let textModuleStyles = '';
-      if (m.type === 'text') {
-        textModuleStyles = `
+      let moduleSpecificStyles = '';
+      if (m.type === 'box') {
+        moduleSpecificStyles = `
   display: flex;
   align-items: ${m.verticalAlign || 'flex-start'};
   padding: 10px;`;
@@ -861,10 +875,10 @@ function generateCSS() {
       css += `.module-${m.id} {
   grid-column: span ${col};
   grid-row: span ${m.row};
-  ${bgStyle}${outline}${aspect}${textModuleStyles}
+  ${bgStyle}${outline}${aspect}${moduleSpecificStyles}
 }\n`;
 
-      if (m.type === 'text') {
+      if (m.type === 'box') {
         css += `.module-${m.id} p {
   text-align: ${m.textAlign || 'left'};
   color: ${m.fontColor || '#000000'};
@@ -911,7 +925,7 @@ function generateCSS() {
 }
 
 
-// === [수정] UI 컨트롤 및 이벤트 핸들러 (텍스트 리스너 추가) ===
+// === [수정] UI 컨트롤 및 이벤트 핸들러 (버그 픽스 및 통합) ===
 
 function init() {
   function addSettingsListener(elementId, eventType, settingKey, valueFn, doSaveState = false, doRender = true) {
@@ -940,7 +954,11 @@ function init() {
   addSettingsListener('target-columns', 'change', 'targetColumns', e => clamp(parseInt(e.target.value) || 1, 1, 12), true);
   addSettingsListener('mobile-order-lock', 'change', 'mobileOrderLocked', e => e.target.checked, true, false); 
   
-  document.getElementById('canvas-scale').addEventListener('input', renderCanvas);
+  // [수정] 캔버스 배율 % 표시 기능 추가
+  document.getElementById('canvas-scale').addEventListener('input', (e) => {
+    renderCanvas();
+    document.getElementById('scale-readout').textContent = `${e.target.value}%`;
+  });
   
   document.getElementById('show-selection').addEventListener('change', e => {
     showSelection = e.target.checked;
@@ -959,6 +977,7 @@ function init() {
         moduleInfo.module[property] = valueFn(e, moduleInfo.layer); 
         renderCanvas();
         if(property === 'col' || property === 'mobileCol') updateMobileSpanHint();
+        if(property === 'type') updateEditPanel(); // [수정] 타입 변경 시 패널 업데이트
         if (doSaveState) saveState();
       }
     });
@@ -967,14 +986,13 @@ function init() {
   addEditListener('edit-type', 'change', 'type', e => e.target.value, true);
   addEditListener('edit-group-id', 'change', 'groupId', e => e.target.value.trim() || null, true);
 
-  // [신규] 텍스트 옵션 리스너
+  // [신규] 텍스트 옵션 리스너 (Box/Text 공용)
   addEditListener('edit-text-align', 'change', 'textAlign', e => e.target.value, true);
   addEditListener('edit-vertical-align', 'change', 'verticalAlign', e => e.target.value, true);
   addEditListener('edit-font-color', 'input', 'fontColor', e => e.target.value);
   addEditListener('edit-font-color', 'change', 'fontColor', e => e.target.value, true);
   addEditListener('edit-font-size', 'input', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100));
   addEditListener('edit-font-size', 'change', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100), true);
-  // [신규] 텍스트 내용 리스너 (실시간/저장 분리)
   addEditListener('edit-text-content', 'input', 'textContent', e => e.target.value);
   addEditListener('edit-text-content', 'change', 'textContent', e => e.target.value, true);
   
@@ -1015,7 +1033,7 @@ function loadSettingsToUI(layer) {
   updateMobileSpanHint();
 }
 
-// [수정] 텍스트 패널 표시/숨기기 및 값 로드
+// [수정] 텍스트 패널 표시/숨기기 (Box/Text 통합)
 function updateEditPanel() {
   const panel = document.getElementById('edit-panel');
   const moduleInfo = getSelectedModule();
@@ -1032,14 +1050,15 @@ function updateEditPanel() {
   document.getElementById('edit-group-id').value = module.groupId || '';
   
   const textOptionsPanel = document.getElementById('text-options-panel');
-  if (module.type === 'text') {
+  // [수정] 'box' 타입일 때 텍스트 옵션 표시
+  if (module.type === 'box') {
     textOptionsPanel.style.display = 'block';
     document.getElementById('edit-text-align').value = module.textAlign || 'left';
     document.getElementById('edit-vertical-align').value = module.verticalAlign || 'flex-start';
     document.getElementById('edit-font-color').value = module.fontColor || '#000000';
     document.getElementById('edit-font-size').value = module.fontSize || ''; 
-    document.getElementById('edit-text-content').value = module.textContent; // [신규]
-  } else {
+    document.getElementById('edit-text-content').value = module.textContent || '';
+  } else { // 'image' 타입일 때 숨김
     textOptionsPanel.style.display = 'none';
   }
   
