@@ -23,7 +23,7 @@ function deepCopy(obj) {
 // --- [신규] 헬퍼: HTML 이스케이프 (XSS 방지) ---
 function escapeHTML(str) {
   if (str === null || str === undefined) return '';
-  return str.replace(/[&<>"']/g, function(m) {
+  return String(str).replace(/[&<>"']/g, function(m) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
   });
 }
@@ -53,8 +53,6 @@ function clamp(value, min, max) {
 
 // --- [신규] 헬퍼: 정렬된 레이어 반환 ---
 function getSortedLayers() {
-  // 우선순위 번호(오름차순)에 따라 레이어 정렬
-  // 번호가 낮은 것이 캔버스에서 더 '아래'에 깔림 (먼저 렌더링됨)
   return [...layers].sort((a, b) => a.priority - b.priority);
 }
 
@@ -128,7 +126,6 @@ function renderLayersList() {
   const list = document.getElementById('layer-list');
   if (!list) return;
   
-  // [수정] 정렬된 레이어 순서대로 목록을 그림
   list.innerHTML = getSortedLayers().map(layer => `
     <li class="layer-item ${layer.id === activeLayerId ? 'active' : ''} ${layer.isLocked ? 'locked' : ''}" 
         onclick="activateLayer(${layer.id})">
@@ -146,7 +143,7 @@ function renderLayersList() {
       <span class="layer-name" 
             contenteditable="true" 
             onblur="renameLayer(event, ${layer.id})"
-            onkeydown="handleLayerRenameKey(event)">${layer.name}</span>
+            onkeydown="handleLayerRenameKey(event)">${escapeHTML(layer.name)}</span>
       <button class="layer-btn layer-btn-lock" onclick="toggleLayerLock(event, ${layer.id})">
         ${layer.isLocked ? '🔒' : '🔓'}
       </button>
@@ -154,8 +151,7 @@ function renderLayersList() {
   `).join('');
 }
 
-
-// === [수정] 캔버스 렌더링 (aspectRatio + min-height 버그 수정) ===
+// === [수정] 캔버스 렌더링 ===
 function renderCanvas() {
   const viewport = document.getElementById('canvas-viewport');
   if (!viewport) return;
@@ -214,16 +210,15 @@ function renderCanvas() {
           align-items: ${moduleData.verticalAlign || 'flex-start'};
           padding: 10px; 
         `;
-        innerHTML = `<p class="module-content" style="${textStyles}">${escapeHTML(moduleData.textContent)}</p>`; 
+        innerHTML = `<p class="module-content" style="${textStyles}">${escapeHTML(moduleData.textContent || '')}</p>`; 
       }
       
       const selectedClass = (showSelection && isSelected) ? 'selected' : '';
       const groupedClass = (showSelection && selectedGroupId && moduleData.groupId === selectedGroupId && !isSelected) ? 'grouped' : '';
       
-      // [수정] aspectRatio가 활성화되면 grid-row를 'auto'로, min-height를 'unset'으로 변경
       const aspectStyle = moduleData.aspectRatio ? `aspect-ratio: ${moduleData.aspectRatio};` : '';
       const rowStyle = moduleData.aspectRatio ? 'auto' : `span ${moduleData.row}`;
-      const minHeightStyle = moduleData.aspectRatio ? 'min-height: unset;' : ''; // min-height: 60px 충돌 방지
+      const minHeightStyle = moduleData.aspectRatio ? 'min-height: unset;' : '';
       
       const backgroundStyle = (moduleType === 'box') ? `background: ${bgColor};` : '';
 
@@ -254,13 +249,12 @@ function renderCanvas() {
            id="grid-${layer.id}"
            style="grid-template-columns: repeat(${columns}, 1fr); gap: ${gap}px; mix-blend-mode: ${layer.settings.blendMode || 'normal'}; ${opacityStyle}; isolation: isolate;"
            ondragover="${isActive && !isLocked ? 'handleDragOver(event)' : ''}"
-           ondrop="${isActive && !isLocked ? 'handleDrop(${layer.id}, null, event)' : ''}">
+           ondrop="${isActive && !isLocked ? `handleDrop(${layer.id}, null, event)` : ''}">
         ${modulesHTML}
       </div>
     `;
   }).join('');
 }
-
 
 // === [신규] 레이어 우선순위 관리 함수 ===
 function updateLayerPriority(event, layerId) {
@@ -284,7 +278,6 @@ function normalizeLayerPriorities() {
     }
   });
 }
-
 
 // === [신규] 레이어 관리 함수 ===
 function addLayer() {
@@ -389,9 +382,7 @@ function toggleLayerLock(event, layerId) {
   saveState();
 }
 
-
-// === [수정] 모듈 관리 함수 (Box/Text 통합 + fontWeight) ===
-
+// === [수정] 모듈 관리 함수 ===
 function addCustomModule() {
   const layer = getActiveLayer();
   if (!layer) { showToast('활성 레이어가 없습니다.'); return; }
@@ -548,7 +539,6 @@ function splitSelectedModule() {
   saveState();
 }
 
-
 function clearActiveLayer() {
   const layer = getActiveLayer();
   if (!layer) return;
@@ -568,7 +558,6 @@ function clearActiveLayer() {
 }
 
 // === [수정] 모듈 드래그 앤 드롭 (마우스) ===
-
 function handleDragStart(layerId, moduleId, moduleIndexInOrder, event) {
     if (event.type === 'mousedown') {
         event.preventDefault(); 
@@ -723,8 +712,7 @@ function handleDocumentTouchEnd(event) {
     document.removeEventListener('touchend', handleDocumentTouchEnd);
 }
 
-// === [수정] 코드 생성 (aspectRatio + min-height 버그 수정) ===
-
+// === [수정] 코드 생성 ===
 function generateHTML() {
   let html = `<!DOCTYPE html>
 <html lang="ko">
@@ -750,7 +738,7 @@ function generateHTML() {
       if (m.type === 'image') {
         innerContent = '      <img src="https://via.placeholder.com/150" alt="placeholder">';
       } else if (m.type === 'box') {
-        innerContent = `      <p>${escapeHTML(m.textContent)}</p>`;
+        innerContent = `      <p>${escapeHTML(m.textContent || '')}</p>`;
       }
 
       return `    <div class="module module-${m.id} type-${m.type || 'box'}${groupClass}">
@@ -777,7 +765,7 @@ function generateCSS() {
 }
 .grid-viewport-wrapper {
   position: relative;
-  max-width: 1400px; /* 예시 최대 너비 */
+  max-width: 1400px;
   margin: 0 auto;
 }
 .grid-container {
@@ -792,9 +780,8 @@ function generateCSS() {
   pointer-events: auto; 
 }
 
-/* [수정] min-height: 60px 삭제 (style.css에서 직접 수정 권장) */
 .module {
-  /* min-height: 60px; */ /* <- 이 줄이 삭제됨 */
+  /* min-height removed for aspect-ratio compatibility */
 }
 .module.type-image { background: #e0e0e0; }
 .module.type-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -830,10 +817,9 @@ function generateCSS() {
       const outline = m.borderWidth > 0 ? `\n  outline: ${m.borderWidth}px solid ${m.borderColor};\n  outline-offset: -${m.borderWidth}px;` : '';
       const bgStyle = (m.type === 'box' || !m.type) ? `background: ${bg};` : '';
       
-      // [수정] aspectRatio가 활성화되면 grid-row를 'auto'로, min-height를 'unset'으로 변경
       const aspect = m.aspectRatio ? `\n  aspect-ratio: ${m.aspectRatio};` : '';
       const row = m.aspectRatio ? 'auto' : `span ${m.row}`;
-      const minHeight = m.aspectRatio ? '\n  min-height: unset;' : ''; // min-height: 60px 충돌 방지
+      const minHeight = m.aspectRatio ? '\n  min-height: unset;' : '';
 
       let moduleSpecificStyles = '';
       if (m.type === 'box') {
@@ -884,10 +870,9 @@ function generateCSS() {
       const mobileSpan = getMobileSpan(m, layer);
       const comment = m.mobileCol !== null ? '/*수동*/' : `/*자동:min(${m.col},${settings.targetColumns})*/`;
       
-      // [수정] 모바일에서도 aspectRatio가 활성화되면 grid-row를 'auto'로, min-height를 'unset'으로 변경
       const aspect = m.aspectRatio ? `\n    aspect-ratio: ${m.aspectRatio};` : '';
       const row = m.aspectRatio ? 'auto' : `span ${m.row}`;
-      const minHeight = m.aspectRatio ? '\n    min-height: unset;' : ''; // min-height: 60px 충돌 방지
+      const minHeight = m.aspectRatio ? '\n    min-height: unset;' : '';
 
       css += `  .module-${m.id} {
     grid-column: span ${mobileSpan}; ${comment}
@@ -901,12 +886,12 @@ function generateCSS() {
   return css;
 }
 
-
-// === [수정] UI 컨트롤 및 이벤트 핸들러 (텍스트 입력 버그 수정) ===
-
+// === [수정] UI 컨트롤 및 이벤트 핸들러 ===
 function init() {
   function addSettingsListener(elementId, eventType, settingKey, valueFn, doSaveState = false, doRender = true) {
-    document.getElementById(elementId).addEventListener(eventType, e => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    element.addEventListener(eventType, e => {
       const layer = getActiveLayer();
       if (layer) {
         layer.settings[settingKey] = valueFn(e);
@@ -929,31 +914,38 @@ function init() {
   addSettingsListener('target-columns', 'change', 'targetColumns', e => clamp(parseInt(e.target.value) || 1, 1, 12), true);
   addSettingsListener('mobile-order-lock', 'change', 'mobileOrderLocked', e => e.target.checked, true, false); 
   
-  document.getElementById('canvas-scale').addEventListener('input', (e) => {
-    renderCanvas();
-    document.getElementById('scale-readout').textContent = `${e.target.value}%`;
-  });
+  const scaleInput = document.getElementById('canvas-scale');
+  if (scaleInput) {
+    scaleInput.addEventListener('input', (e) => {
+      renderCanvas();
+      document.getElementById('scale-readout').textContent = `${e.target.value}%`;
+    });
+  }
   
-  document.getElementById('show-selection').addEventListener('change', e => {
-    showSelection = e.target.checked;
-    renderCanvas(); 
-  });
+  const showSelectionEl = document.getElementById('show-selection');
+  if (showSelectionEl) {
+    showSelectionEl.addEventListener('change', e => {
+      showSelection = e.target.checked;
+      renderCanvas(); 
+    });
+  }
   
-  document.getElementById('dim-inactive-layers').addEventListener('change', e => {
+  const dimLayersEl = document.getElementById('dim-inactive-layers');
+  if (dimLayersEl) {
+    dimLayersEl.addEventListener('change', e => {
       dimInactiveLayers = e.target.checked;
       renderCanvas();
-  });
+    });
+  }
   
   function addEditListener(elementId, eventType, property, valueFn, doSaveState = false) {
-    document.getElementById(elementId).addEventListener(eventType, e => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    element.addEventListener(eventType, e => {
       const moduleInfo = getSelectedModule();
       if (moduleInfo) {
         moduleInfo.module[property] = valueFn(e, moduleInfo.layer, moduleInfo.module); 
-        
-        // [수정] 텍스트 내용 외의 것들만 즉시 렌더링 (텍스트는 별도 처리)
-        if (property !== 'textContent') {
-          renderCanvas();
-        }
+        renderCanvas();
         
         if(property === 'col' || property === 'mobileCol') updateMobileSpanHint();
         if(property === 'type') updateEditPanel();
@@ -970,7 +962,6 @@ function init() {
   
   addEditListener('edit-type', 'change', 'type', e => e.target.value, true);
   addEditListener('edit-group-id', 'change', 'groupId', e => e.target.value.trim() || null, true);
-
   addEditListener('edit-text-align', 'change', 'textAlign', e => e.target.value, true);
   addEditListener('edit-vertical-align', 'change', 'verticalAlign', e => e.target.value, true);
   addEditListener('edit-font-color', 'input', 'fontColor', e => e.target.value);
@@ -979,21 +970,24 @@ function init() {
   addEditListener('edit-font-size', 'change', 'fontSize', e => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 14, 8, 100), true);
   addEditListener('edit-font-weight', 'change', 'fontWeight', e => e.target.value, true);
   
-  // [수정] 텍스트 입력 버그 수정을 위해 'edit-text-content' 리스너를 분리
-  document.getElementById('edit-text-content').addEventListener('input', (e) => {
-    const moduleInfo = getSelectedModule();
-    if (moduleInfo) {
-      moduleInfo.module.textContent = e.target.value;
-      renderCanvas(); // ★★★ 실시간 렌더링
-    }
-  });
-  document.getElementById('edit-text-content').addEventListener('change', (e) => {
-    const moduleInfo = getSelectedModule();
-    if (moduleInfo) {
-      moduleInfo.module.textContent = e.target.value;
-      saveState(); // ★★★ 변경 완료 시 저장
-    }
-  });
+  // 텍스트 입력 수정
+  const textContentEl = document.getElementById('edit-text-content');
+  if (textContentEl) {
+    textContentEl.addEventListener('input', (e) => {
+      const moduleInfo = getSelectedModule();
+      if (moduleInfo) {
+        moduleInfo.module.textContent = e.target.value;
+        renderCanvas();
+      }
+    });
+    textContentEl.addEventListener('change', (e) => {
+      const moduleInfo = getSelectedModule();
+      if (moduleInfo) {
+        moduleInfo.module.textContent = e.target.value;
+        saveState();
+      }
+    });
+  }
 
   addEditListener('edit-col', 'input', 'col', (e, layer) => clamp(parseInt(e.target.value) || 1, 1, layer.settings.desktopColumns));
   addEditListener('edit-col', 'change', 'col', (e, layer) => clamp(parseInt(e.target.value) || 1, 1, layer.settings.desktopColumns), true);
@@ -1002,11 +996,23 @@ function init() {
   addEditListener('edit-mobile-col', 'input', 'mobileCol', (e, layer) => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, layer.settings.targetColumns));
   addEditListener('edit-mobile-col', 'change', 'mobileCol', (e, layer) => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, layer.settings.targetColumns), true);
   
-  addEditListener('edit-aspect-ratio', 'change', 'aspectRatio', (e, layer, module) => {
-    const newRatio = e.target.checked ? `${module.col} / ${module.row}` : null;
-    updateAspectRatioLabel(module, newRatio);
-    return newRatio;
-  }, true);
+  // Aspect Ratio 수정
+  const aspectRatioEl = document.getElementById('edit-aspect-ratio');
+  if (aspectRatioEl) {
+    aspectRatioEl.addEventListener('change', (e) => {
+      const moduleInfo = getSelectedModule();
+      if (moduleInfo) {
+        if (e.target.checked) {
+          moduleInfo.module.aspectRatio = `${moduleInfo.module.col} / ${moduleInfo.module.row}`;
+        } else {
+          moduleInfo.module.aspectRatio = null;
+        }
+        updateAspectRatioLabel(moduleInfo.module);
+        renderCanvas();
+        saveState();
+      }
+    });
+  }
 
   addEditListener('edit-color', 'input', 'color', e => e.target.value);
   addEditListener('edit-color', 'change', 'color', e => e.target.value, true);
@@ -1014,6 +1020,19 @@ function init() {
   addEditListener('edit-border-color', 'change', 'borderColor', e => e.target.value, true);
   addEditListener('edit-border-width', 'input', 'borderWidth', e => clamp(parseInt(e.target.value) || 0, 0, 20));
   addEditListener('edit-border-width', 'change', 'borderWidth', e => clamp(parseInt(e.target.value) || 0, 0, 20), true);
+  
+  const transparentEl = document.getElementById('edit-transparent');
+  if (transparentEl) {
+    transparentEl.addEventListener('change', (e) => {
+      const moduleInfo = getSelectedModule();
+      if (moduleInfo) {
+        moduleInfo.module.transparent = e.target.checked;
+        toggleColorPicker('edit', e.target.checked);
+        renderCanvas();
+        saveState();
+      }
+    });
+  }
   
   addLayer(); 
 }
@@ -1038,14 +1057,13 @@ function loadSettingsToUI(layer) {
   updateMobileSpanHint();
 }
 
-function updateAspectRatioLabel(module, newRatio) {
+function updateAspectRatioLabel(module) {
   const label = document.getElementById('edit-aspect-ratio-label');
-  const ratio = newRatio !== undefined ? newRatio : module.aspectRatio;
-  
-  if (ratio) {
-    label.textContent = `비율 고정 (${ratio.replace(/\s/g, '')})`;
+  if (!label) return;
+  if (module.aspectRatio) {
+    label.textContent = `정사각형 셀 기준 (${module.col}×${module.row})`;
   } else {
-    label.textContent = `비율 고정 (${module.col}:${module.row})`;
+    label.textContent = `정사각형 셀 기준 (${module.col}×${module.row})`;
   }
 }
 
@@ -1108,6 +1126,7 @@ function handleCanvasClick(event) {
 function calculateMobileSpan(desktopCol, desktopCols, targetCols) {
   return Math.max(1, Math.min(desktopCol, targetCols));
 }
+
 function getMobileSpan(module, layer) {
   const { settings } = layer;
   if(module.mobileCol !== undefined && module.mobileCol !== null && module.mobileCol !== '') {
@@ -1129,11 +1148,13 @@ function updateStats() {
   document.getElementById('stat-gap').textContent = `${layer.settings.desktopGap}px`;
   document.getElementById('stat-modules').textContent = `${layer.modules.length}개`;
 }
+
 function updateModeHint() {
   const layer = getActiveLayer();
   if (!layer) return;
   document.getElementById('mode-hint').textContent = `${layer.settings.desktopColumns}열 → ${layer.settings.targetColumns}열로 리플로우`;
 }
+
 function updateMobileSpanHint() {
   const moduleInfo = getSelectedModule();
   if(!moduleInfo) return;
@@ -1141,6 +1162,7 @@ function updateMobileSpanHint() {
   const auto = getMobileSpan(module, layer); 
   document.getElementById('mobile-span-hint').textContent = `자동: ${auto}열 (min(${module.col}열, ${layer.settings.targetColumns}열))`;
 }
+
 function updateAddModuleHint() {
     const layer = getActiveLayer();
     const hintEl = document.getElementById('add-module-hint');
@@ -1183,17 +1205,11 @@ function toggleMobileOrderLock(event) {
 
 function toggleColorPicker(prefix, isTransparent) {
   const colorInput = document.getElementById(prefix + '-color');
+  if (!colorInput) return;
   colorInput.disabled = isTransparent;
   colorInput.style.opacity = isTransparent ? 0.5 : 1;
-  if (prefix === 'edit') {
-      const moduleInfo = getSelectedModule();
-      if (moduleInfo && moduleInfo.module.transparent !== isTransparent) {
-          moduleInfo.module.transparent = isTransparent;
-          renderCanvas();
-          saveState();
-      }
-  }
 }
+
 function selectMode(mode) {
   if (mode !== 'reflow') { showToast('이 모드는 현재 지원되지 않습니다.'); return; }
   document.querySelectorAll('.mode-option').forEach(opt => opt.classList.remove('selected'));
@@ -1202,20 +1218,25 @@ function selectMode(mode) {
   updateCode();
   showToast(getModeLabel(mode) + ' 모드');
 }
+
 function getModeLabel(mode) { return {'reflow':'리플로우'}[mode]; }
+
 function updateCode() {
   document.getElementById('code-display').textContent = activeTab === 'html' ? generateHTML() : generateCSS();
 }
+
 function switchTab(tab, event) {
   activeTab = tab;
   document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
   event.target.classList.add('active');
   updateCode();
 }
+
 function copyCode() {
   navigator.clipboard.writeText(activeTab === 'html' ? generateHTML() : generateCSS());
   showToast(`${activeTab.toUpperCase()} 코드 복사됨!`);
 }
+
 function showToast(message) {
   const toast = document.getElementById('toast');
   toast.textContent = message;
