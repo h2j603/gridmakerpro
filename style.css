@@ -26,9 +26,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 /* --- 레이어 패널 스타일 --- */
 #layer-list { list-style: none; max-height: 250px; overflow-y: auto; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; }
 .layer-item { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #e5e7eb; cursor: pointer; 
-  /* [수정] 모바일 터치 드래그 시 텍스트 선택 방지 */
-  -webkit-user-select: none;
-  user-select: none;
+  /* [수정] user-select는 핸들에만 적용하므로 여기서 제거 */
 }
 .layer-item:last-child { border-bottom: none; }
 .layer-item.active { background: #eff6ff; }
@@ -42,11 +40,28 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   opacity: 0.5;
   background: #dbeafe; 
 }
-/* [신규] 레이어 드래그 시 자식요소(이름)의 텍스트 선택 방지 */
 .layer-item.dragging .layer-name {
   -webkit-user-select: none;
   user-select: none;
-  pointer-events: none; /* 드래그 중에는 이름 편집 상호작용 비활성화 */
+  pointer-events: none; 
+}
+
+/* [신규] 레이어 드래그 핸들 스타일 */
+.layer-drag-handle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 28px;
+  height: 28px;
+  cursor: move;
+  color: #9ca3af;
+  font-size: 18px;
+  line-height: 1;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.layer-drag-handle:hover {
+  color: #111827;
 }
 
 
@@ -71,14 +86,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   bottom: 20px;
   display: grid;
   min-height: 500px;
-  /* [수정] 블렌딩 격리 (JS가 인라인 스타일로 제어) */
 }
 .canvas-viewport.mobile-view .grid-container {
   min-height: auto;
 }
 .grid-container:not(.active-layer) {
   pointer-events: none;
-  /* [수정] JS가 'opacity: 0.4'를 인라인 스타일로 제어 */
 }
 .grid-container.hidden {
   display: none;
@@ -99,7 +112,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .module-delete { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; background: rgba(239, 68, 68, 0.9); color: white; border: none; border-radius: 50%; cursor: pointer; display: none; font-size: 14px; z-index: 10; }
 .active-layer .module:hover .module-delete { display: block; }
 .module-drag-handle { position: absolute; bottom: 4px; right: 4px; width: 24px; height: 24px; background: rgba(0,0,0,0.5); color: white; border-radius: 4px; cursor: move; display: none; justify-content: center; align-items: center; font-size: 16px; line-height: 1; padding-bottom: 2px; z-index: 10; 
-  /* [수정] 모바일 터치 드래그 시 텍스트 선택 방지 */
   -webkit-user-select: none;
   user-select: none;
 }
@@ -110,7 +122,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .module[data-type="text"] { background: #ffffff; border: 1px solid #e0e0e0; }
 .module[data-type="text"]:hover { border-color: #3b82f6; }
 
-/* [신규] .canvas-viewport.selection-hidden 클래스가 있을 때 호버/핸들 UI 숨기기 */
+/* .canvas-viewport.selection-hidden ... */
 .canvas-viewport.selection-hidden .active-layer .module:hover {
   border-color: transparent; 
   transform: none; 
@@ -138,5 +150,5 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .code-tabs { display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 2px solid #e5e7eb; }
 .code-tab { padding: 8px 16px; background: transparent; border: none; color: #6b7280; cursor: pointer; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -2px; }
 .code-tab.active { color: #3b82f6; border-bottom-color: #3b82f6; }
-.code-display { background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.6; max-height: 500px; overflow-y: auto; white-space: pre; }
+.code-display { background: #1e2B3b; color: #e2e8f0; padding: 16px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.6; max-height: 500px; overflow-y: auto; white-space: pre; }
 .toast { position: fixed; bottom: 20px; right: 20px; background: #111827; color: white; padding: 12px 20px; border-radius: 8px; z-index: 1000; }
