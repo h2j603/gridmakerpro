@@ -36,71 +36,70 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
 .layer-item.locked .layer-btn-lock { color: #3b82f6; }
 
 .layer-priority {
-  width: 40px;
-  margin-right: 8px;
-  padding: 4px;
-  text-align: center;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  -moz-appearance: textfield; 
+  width: 40px;
+  margin-right: 8px;
+  padding: 4px;
+  text-align: center;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  -moz-appearance: textfield; 
 }
 .layer-priority:focus {
-  outline: 1px solid #3b82f6;
-  border-color: #3b82f6;
+  outline: 1px solid #3b82f6;
+  border-color: #3b82f6;
 }
 .layer-priority::-webkit-outer-spin-button,
 .layer-priority::-webkit-inner-spin-button {
-  -webkit-appearance: none; 
-  margin: 0;
+  -webkit-appearance: none; 
+  margin: 0;
 }
 
-/* --- 캔버스 및 그리드 스타일 (수정) --- */
+/* --- 캔버스 및 그리드 스타일 --- */
 .canvas-viewport {
-  position: relative;
-  background: whitespoke;
-  border-radius: 8px;
-  padding: 20px;
-  min-height: 400px; /* 600px -> 400px */
-  max-height: 600px; /* 최대 높이 추가 */
-  overflow: auto; /* 스크롤 추가 */
-  transition: all 0.3s;
-  transform-origin: top center;
+  position: relative;
+  background: whitespoke;
+  border-radius: 8px;
+  padding: 20px;
+  min-height: 600px;
+  transition: all 0.3s;
+  transform-origin: top center;
+  overflow: hidden;
+  max-width: 100%;
 }
 
 .grid-container {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  right: 20px;
-  min-height: 360px; /* 500px -> 360px */
-  display: grid;
-  grid-auto-rows: minmax(60px, auto); /* 행 높이 자동 설정 추가 */
-  /* grid-auto-flow: dense; <- [!!!] 이 줄이 삭제되었습니다 (중요) */
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  display: grid;
+  min-height: 500px;
+  grid-auto-flow: dense; /* 추가: 빈 공간 채우기 */
 }
 .canvas-viewport.mobile-view .grid-container {
-  min-height: auto;
+  min-height: auto;
 }
 .grid-container:not(.active-layer) {
-  pointer-events: none;
+  pointer-events: none;
 }
 .grid-container.hidden {
-  display: none;
-}
-/* [신규] 전역 Aspect Ratio가 켜졌을 때 */
-.grid-container.aspect-ratio-enabled .module {
-  min-height: 0;
+  display: none;
 }
 
 /* --- 모듈 스타일 --- */
-.module { 
-  background: #8c6c3c; 
-  border-radius: 0; 
-  cursor: pointer; 
-  position: relative; 
-  border: 2px solid transparent; 
-  transition: all 0.2s; 
-  overflow: hidden; 
-  min-height: 60px; /* 기본 최소 높이 */
+.module { 
+  background: #8c6c3c; 
+  border-radius: 0; 
+  cursor: pointer; 
+  position: relative; 
+  border: 2px solid transparent; 
+  transition: all 0.2s; 
+  overflow: hidden; 
+  min-height: 60px; /* 기본 최소 높이 */
+}
+.module.has-aspect-ratio {
+  min-height: 0; /* aspect-ratio가 있을 때만 최소 높이 제거 */
 }
 .active-layer .module:hover { border-color: #3b82f6; transform: translateY(-2px); }
 .module.selected { border-color: #ef4444; border-width: 3px; }
@@ -114,50 +113,50 @@ body { font-family: "Pretendard", -apple-system, BlinkMacSystemFont, 'Segoe UI',
 .module-warning { position: absolute; top: 4px; right: 28px; background: rgba(245, 158, 11, 0.9); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; z-index: 10; }
 .module-delete { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; background: rgba(239, 68, 68, 0.9); color: white; border: none; border-radius: 50%; cursor: pointer; display: none; font-size: 14px; z-index: 10; }
 .active-layer .module:hover .module-delete { display: block; }
-.module-drag-handle { 
-  position: absolute; 
-  bottom: 4px; 
-  right: 4px; 
-  width: 24px; 
-  height: 24px; 
-  background: rgba(0,0,0,0.5); 
-  color: white; 
-  border-radius: 4px; 
-  cursor: move; 
-  display: none; 
-  justify-content: center; 
-  align-items: center; 
-  font-size: 16px; 
-  line-height: 1; 
-  padding-bottom: 2px; 
-  z-index: 10; 
-  -webkit-user-select: none;
-  user-select: none;
+.module-drag-handle { 
+  position: absolute; 
+  bottom: 4px; 
+  right: 4px; 
+  width: 24px; 
+  height: 24px; 
+  background: rgba(0,0,0,0.5); 
+  color: white; 
+  border-radius: 4px; 
+  cursor: move; 
+  display: none; 
+  justify-content: center; 
+  align-items: center; 
+  font-size: 16px; 
+  line-height: 1; 
+  padding-bottom: 2px; 
+  z-index: 10; 
+  -webkit-user-select: none;
+  user-select: none;
 }
 .active-layer .module:hover .module-drag-handle { display: flex; }
 
-.module-content { 
-  padding: 30px 10px 10px; 
-  font-size: 14px;
-  color: #333;
-  white-space: pre-wrap;
-  word-break: break-word;
+.module-content { 
+  padding: 30px 10px 10px; 
+  font-size: 14px;
+  color: #333;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .module-content.image { padding: 0; width: 100%; height: 100%; object-fit: cover; }
 .module[data-type="image"] { background: #e0e0e0; }
 .module[data-type="box"] .module-content {
-  padding: 0;
+  padding: 0;
 }
 
 .canvas-viewport.selection-hidden .active-layer .module:hover {
-  border-color: transparent; 
-  transform: none; 
+  border-color: transparent; 
+  transform: none; 
 }
 .canvas-viewport.selection-hidden .active-layer .module:hover .module-delete {
-  display: none;
+  display: none;
 }
 .canvas-viewport.selection-hidden .active-layer .module:hover .module-drag-handle {
-  display: none;
+  display: none;
 }
 
 /* --- 나머지 UI 스타일 --- */
