@@ -359,7 +359,7 @@ function renderCanvas() {
     
     // [신규] 전역 AR 클래스 추가
     const aspectRatioClass = globalAspectRatio ? 'aspect-ratio-enabled' : '';
-    const gridAutoFlowStyle = (currentView === 'desktop') ? '' : 'grid-auto-flow: dense;'; // 모바일에선 dense 유지
+    const gridAutoFlowStyle = (currentView === 'desktop') ? 'grid-auto-flow: row;' : 'grid-auto-flow: dense;'; // [수정] 데스크톱은 'row', 모바일은 'dense'
 
     return `
       <div class="grid-container ${isActive ? 'active-layer' : ''} ${isLocked ? 'locked' : ''} ${!layer.isVisible ? 'hidden' : ''} ${aspectRatioClass}"
