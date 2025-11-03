@@ -26,7 +26,7 @@ function escapeHTML(str) {
   if (str === null || str === undefined) return '';
   return String(str).replace(/[&<>"']/g, function(m) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
-G });
+  });
 }
 
 // --- [신규] 헬퍼: 활성 레이어 가져오기 ---
@@ -96,7 +96,7 @@ function createGridMap(layer) {
     if (!module || module.gridX !== null) return; // 이미 배치되었으면 건너뛰기
     
     // 빈 공간 찾기
-    while (grid[currentRow][currentCol] !== null) {
+    while (currentRow < grid.length && grid[currentRow][currentCol] !== null) {
       currentCol++;
       if (currentCol >= cols) {
         currentCol = 0;
@@ -106,7 +106,7 @@ function createGridMap(layer) {
     
     // 모듈이 맞는지 확인
     let fits = true;
-    while (true) {
+    while (currentRow < grid.length) {
       fits = true;
       for (let r = 0; r < module.row; r++) {
         for (let c = 0; c < module.col; c++) {
@@ -130,13 +130,15 @@ function createGridMap(layer) {
       }
     }
     
+    if (currentRow >= grid.length) return; // 그리드 맵 초과
+    
     // 모듈 배치
     module.gridX = currentCol;
     module.gridY = currentRow;
     for (let r = 0; r < module.row; r++) {
       for (let c = 0; c < module.col; c++) {
         if (currentRow + r < grid.length && currentCol + c < cols) {
-          grid[currentRow + r][currentCol + c] = moduleId;
+          grid[currentRow + r][currentCol + c] = module.id;
         }
       }
     }
@@ -254,7 +256,7 @@ function renderLayersList() {
   `).join('');
 }
 
-// === [수정] 캔버스 렌더링 - 좌표 시스템 및 전역 AR 적용 ===
+// === [수정] 캔버스 렌더링 - 좌표 시스템 및 전역 AR 적용 (CSS 문법 오류 수정) ===
 function renderCanvas() {
   const viewport = document.getElementById('canvas-viewport');
   if (!viewport) return;
@@ -326,18 +328,24 @@ function renderCanvas() {
       
       // [수정] 전역 aspect-ratio 적용
       const aspectStyle = globalAspectRatio ? `aspect-ratio: ${moduleData.col} / ${moduleData.row};` : '';
-      const rowStyle = `span ${moduleData.row}`;  // 항상 span 값 유지
       
-      // [신규] 좌표가 있으면 명시적 배치 (데스크톱 뷰)
-      const gridPlacement = (moduleData.gridX !== undefined && moduleData.gridX !== null && moduleData.gridY !== undefined && moduleData.gridY !== null && currentView === 'desktop') 
-        ? `grid-column-start: ${moduleData.gridX + 1}; grid-row-start: ${moduleData.gridY + 1};` 
-        : '';
+      // [!!!] CSS 문법 오류 수정 (Turn 9)
+      let columnStyle, rowStyle;
+      if (moduleData.gridX !== undefined && moduleData.gridX !== null && moduleData.gridY !== undefined && moduleData.gridY !== null && currentView === 'desktop') {
+        // 좌표가 있으면: "시작점 / span 크기"
+        columnStyle = `${moduleData.gridX + 1} / span ${col}`;
+        rowStyle = `${moduleData.gridY + 1} / span ${moduleData.row}`;
+      } else {
+        // 좌표가 없으면 (모바일 뷰 등): "span 크기"
+        columnStyle = `span ${col}`;
+        rowStyle = `span ${moduleData.row}`;
+      }
       
       const backgroundStyle = (moduleType === 'box') ? `background: ${bgColor};` : '';
 
       return `
       <div class="module ${selectedClass} ${groupedClass} ${showWarning ? 'warning' : ''}" 
-           style="grid-column: span ${col}; grid-row: ${rowStyle}; ${gridPlacement} ${backgroundStyle} ${outlineStyle} ${aspectStyle} ${moduleFlexStyles}"
+           style="grid-column: ${columnStyle}; grid-row: ${rowStyle}; ${backgroundStyle} ${outlineStyle} ${aspectStyle} ${moduleFlexStyles}"
            data-type="${moduleType}"
            data-group-id="${moduleData.groupId || ''}"
            data-module-info="${layer.id},${moduleData.id},${i}"
@@ -359,7 +367,8 @@ function renderCanvas() {
     
     // [신규] 전역 AR 클래스 추가
     const aspectRatioClass = globalAspectRatio ? 'aspect-ratio-enabled' : '';
-    const gridAutoFlowStyle = (currentView === 'desktop') ? 'grid-auto-flow: row;' : 'grid-auto-flow: dense;'; // [수정] 데스크톱은 'row', 모바일은 'dense'
+    // [!!!] grid-auto-flow 충돌 수정 (Turn 8)
+    const gridAutoFlowStyle = (currentView === 'desktop') ? 'grid-auto-flow: row;' : 'grid-auto-flow: dense;'; 
 
     return `
       <div class="grid-container ${isActive ? 'active-layer' : ''} ${isLocked ? 'locked' : ''} ${!layer.isVisible ? 'hidden' : ''} ${aspectRatioClass}"
@@ -526,7 +535,6 @@ function addCustomModule() {
     fontColor: '#000000',
     fontSize: null,
     fontWeight: '400'
-    // [수정] aspectRatio: null 제거
   };
   
   layer.modules.push(newModule);
@@ -667,9 +675,13 @@ function splitSelectedModule() {
   
   // 순서 배열에서 기존 모듈 ID 제거
   const desktopOrderIndex = layer.desktopOrder.indexOf(module.id);
-  layer.desktopOrder.splice(desktopOrderIndex, 1);
+  if (desktopOrderIndex > -1) {
+    layer.desktopOrder.splice(desktopOrderIndex, 1);
+  }
   const mobileOrderIndex = layer.mobileOrder.indexOf(module.id);
-  layer.mobileOrder.splice(mobileOrderIndex, 1);
+  if (mobileOrderIndex > -1) {
+    layer.mobileOrder.splice(mobileOrderIndex, 1);
+  }
 
   // 새 모듈 ID들을 순서 배열에 추가 (정렬은 createGridMap이 담당)
   layer.desktopOrder.push(...newModuleIds);
@@ -777,7 +789,6 @@ function clearActiveLayer() {
 }
 
 // === [수정] 모듈 드래그 앤 드롭 (마우스) ===
-// 드래그 앤 드롭은 좌표 시스템과 충돌할 수 있으므로,
 // 드롭 시 좌표를 null로 리셋하고 createGridMap이 재배치하도록 수정
 function handleDragStart(layerId, moduleId, moduleIndexInOrder, event) {
     if (event.type === 'mousedown') {
@@ -949,7 +960,7 @@ function handleDocumentTouchEnd(event) {
     document.removeEventListener('touchend', handleDocumentTouchEnd);
 }
 
-// === [수정] 코드 생성 - 좌표 및 전역 AR 적용 ===
+// === [수정] 코드 생성 - 좌표 및 전역 AR 적용 (CSS 문법 오류 수정) ===
 function generateHTML() {
   let html = `<!DOCTYPE html>
 <html lang="ko">
@@ -1013,6 +1024,7 @@ function generateCSS() {
   width: 100%;
   pointer-events: none;
   grid-auto-rows: minmax(60px, auto); /* [신규] 행 높이 자동 */
+  grid-auto-flow: row; /* [신규] 데스크톱 기본값 'row' 명시 */
 }
 .grid-container .module {
   pointer-events: auto; 
@@ -1069,12 +1081,18 @@ ${globalAspectRatio ? `
       const outline = m.borderWidth > 0 ? `\n  outline: ${m.borderWidth}px solid ${m.borderColor};\n  outline-offset: -${m.borderWidth}px;` : '';
       const bgStyle = (m.type === 'box' || !m.type) ? `background: ${bg};` : '';
       
-      // [수정] 전역 AR 및 좌표 반영
+      // [!!!] CSS 문법 오류 수정 (Turn 9)
       const aspect = globalAspectRatio ? `\n  aspect-ratio: ${m.col} / ${m.row};` : '';
-      const row = `span ${m.row}`;
-      const gridPlacement = (m.gridX !== null && m.gridY !== null)
-        ? `\n  grid-column-start: ${m.gridX + 1};\n  grid-row-start: ${m.gridY + 1};`
-        : '';
+      
+      let columnStyle, rowStyle;
+      if (m.gridX !== null && m.gridY !== null) {
+        columnStyle = `${m.gridX + 1} / span ${col}`;
+        rowStyle = `${m.gridY + 1} / span ${m.row}`;
+      } else {
+        // auto-flow (혹시 모를 예외 처리)
+        columnStyle = `span ${col}`;
+        rowStyle = `span ${m.row}`;
+      }
 
       let moduleSpecificStyles = '';
       if (m.type === 'box') {
@@ -1085,8 +1103,8 @@ ${globalAspectRatio ? `
       }
 
       css += `.module-${m.id} {
-  grid-column: span ${col};
-  grid-row: ${row};${gridPlacement}
+  grid-column: ${columnStyle};
+  grid-row: ${rowStyle};
   ${bgStyle}${outline}${aspect}${moduleSpecificStyles}
 }\n`;
 
@@ -1149,7 +1167,10 @@ ${globalAspectRatio ? `
 function init() {
   function addSettingsListener(elementId, eventType, settingKey, valueFn, doSaveState = false, doRender = true) {
     const element = document.getElementById(elementId);
-    if (!element) return;
+    if (!element) {
+      console.error('Element not found:', elementId);
+      return;
+    }
     element.addEventListener(eventType, e => {
       const layer = getActiveLayer();
       if (layer) {
@@ -1211,7 +1232,10 @@ function init() {
   
   function addEditListener(elementId, eventType, property, valueFn, doSaveState = false) {
     const element = document.getElementById(elementId);
-    if (!element) return;
+    if (!element) {
+      console.error('Element not found:', elementId);
+      return;
+    }
     element.addEventListener(eventType, e => {
       const moduleInfo = getSelectedModule();
       if (moduleInfo) {
@@ -1269,8 +1293,6 @@ function init() {
   addEditListener('edit-mobile-col', 'input', 'mobileCol', (e, layer) => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, layer.settings.targetColumns));
   addEditListener('edit-mobile-col', 'change', 'mobileCol', (e, layer) => e.target.value === '' ? null : clamp(parseInt(e.target.value) || 1, 1, layer.settings.targetColumns), true);
   
-  // [수정] 개별 Aspect Ratio 리스너 제거
-  
   addEditListener('edit-color', 'input', 'color', e => e.target.value);
   addEditListener('edit-color', 'change', 'color', e => e.target.value, true);
   addEditListener('edit-border-color', 'input', 'borderColor', e => e.target.value);
@@ -1314,8 +1336,6 @@ function loadSettingsToUI(layer) {
   updateMobileSpanHint();
 }
 
-// [수정] updateAspectRatioLabel 함수 제거됨
-
 function updateEditPanel() {
   const panel = document.getElementById('edit-panel');
   const moduleInfo = getSelectedModule();
@@ -1350,14 +1370,12 @@ function updateEditPanel() {
   document.getElementById('edit-mobile-col').value = module.mobileCol !== null ? clamp(module.mobileCol, 1, layer.settings.targetColumns) : '';
   document.getElementById('edit-mobile-col').max = layer.settings.targetColumns;
   
-  // [수정] 개별 Aspect Ratio UI 코드 제거
-
   document.getElementById('edit-color').value = module.color || '#8c6c3c';
   const isTransparent = module.transparent || false;
   document.getElementById('edit-transparent').checked = isTransparent;
   toggleColorPicker('edit', isTransparent);
   document.getElementById('edit-border-color').value = module.borderColor || '#000000';
-  document.getElementById('edit-border-width').value = module.borderWidth || 0;
+nbsp; document.getElementById('edit-border-width').value = module.borderWidth || 0;
   document.getElementById('split-h').value = 1;
   document.getElementById('split-v').value = 1;
 
