@@ -1,26 +1,26 @@
-// --- [신규] 글로벌 상태 변수 ---
+// --- 글로벌 상태 변수 ---
 let layers = []; 
 let activeLayerId = null;
 let selectedModuleId = null;
 
-// --- [수정] 글로벌 설정 (공통 뷰 상태) ---
+// --- 글로벌 설정 (공통 뷰 상태) ---
 let currentView = 'desktop', activeTab = 'html';
 let showSelection = true;
 let dimInactiveLayers = true; 
 
-// --- [신규] 드래그 상태 변수 ---
+// --- 드래그 상태 변수 ---
 let draggedModuleInfo = null; 
 
-// --- [신규] 히스토리 변수 (레이어 구조 전체 저장) ---
+// --- 히스토리 변수 (레이어 구조 전체 저장) ---
 let history = [];
 let historyIndex = -1;
 
-// --- [신규] 헬퍼: 깊은 복사 ---
+// --- 헬퍼: 깊은 복사 ---
 function deepCopy(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
-// --- [신규] 헬퍼: HTML 이스케이프 (XSS 방지) ---
+// --- 헬퍼: HTML 이스케이프 (XSS 방지) ---
 function escapeHTML(str) {
   if (str === null || str === undefined) return '';
   return String(str).replace(/[&<>"']/g, function(m) {
@@ -28,13 +28,13 @@ function escapeHTML(str) {
   });
 }
 
-// --- [신규] 헬퍼: 활성 레이어 가져오기 ---
+// --- 헬퍼: 활성 레이어 가져오기 ---
 function getActiveLayer() {
   if (!activeLayerId) return null;
   return layers.find(l => l.id === activeLayerId);
 }
 
-// --- [신규] 헬퍼: 선택된 모듈 가져오기 ---
+// --- 헬퍼: 선택된 모듈 가져오기 ---
 function getSelectedModule() {
   const layer = getActiveLayer();
   if (!layer || selectedModuleId === null) return null;
@@ -46,17 +46,17 @@ function getSelectedModule() {
   return { module, layer }; 
 }
 
-// --- [신규] 헬퍼: Clamp ---
+// --- 헬퍼: Clamp ---
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max));
 }
 
-// --- [신규] 헬퍼: 정렬된 레이어 반환 ---
+// --- 헬퍼: 정렬된 레이어 반환 ---
 function getSortedLayers() {
   return [...layers].sort((a, b) => a.priority - b.priority);
 }
 
-// === [신규] 상태 저장 (Undo/Redo) ===
+// === 상태 저장 (Undo/Redo) ===
 function saveState() {
   if (historyIndex < history.length - 1) {
     history.splice(historyIndex + 1);
@@ -75,7 +75,7 @@ function saveState() {
   updateUndoRedoButtons();
 }
 
-// === [신규] 상태 불러오기 (Undo/Redo) ===
+// === 상태 불러오기 (Undo/Redo) ===
 function loadState(state) {
   if (!state) return;
   
@@ -112,7 +112,7 @@ function updateUndoRedoButtons() {
   document.getElementById('redo-btn').disabled = (historyIndex >= history.length - 1);
 }
 
-// === [신규] 전체 UI 렌더링 ===
+// === 전체 UI 렌더링 ===
 function renderAll() {
   renderLayersList();
   renderCanvas();
@@ -121,7 +121,7 @@ function renderAll() {
   updateAddModuleHint();
 }
 
-// === [수정] 레이어 패널 렌더링 (우선순위 입력 방식) ===
+// === 레이어 패널 렌더링 (우선순위 입력 방식) ===
 function renderLayersList() {
   const list = document.getElementById('layer-list');
   if (!list) return;
@@ -151,7 +151,7 @@ function renderLayersList() {
   `).join('');
 }
 
-// === [수정] 캔버스 렌더링 - aspect-ratio 문제 수정 ===
+// === 캔버스 렌더링 - aspect-ratio 문제 수정 ===
 function renderCanvas() {
   const viewport = document.getElementById('canvas-viewport');
   if (!viewport) return;
@@ -257,7 +257,7 @@ function renderCanvas() {
   }).join('');
 }
 
-// === [신규] 레이어 우선순위 관리 함수 ===
+// === 레이어 우선순위 관리 함수 ===
 function updateLayerPriority(event, layerId) {
   event.stopPropagation();
   const layer = layers.find(l => l.id === layerId);
@@ -280,7 +280,7 @@ function normalizeLayerPriorities() {
   });
 }
 
-// === [신규] 레이어 관리 함수 ===
+// === 레이어 관리 함수 ===
 function addLayer() {
   const newName = `Layer ${layers.length + 1}`;
   const newPriority = layers.length > 0 ? Math.max(...layers.map(l => l.priority)) + 1 : 0;
@@ -383,7 +383,7 @@ function toggleLayerLock(event, layerId) {
   saveState();
 }
 
-// === [수정] 모듈 관리 함수 ===
+// === 모듈 관리 함수 ===
 function addCustomModule() {
   const layer = getActiveLayer();
   if (!layer) { showToast('활성 레이어가 없습니다.'); return; }
@@ -558,7 +558,7 @@ function clearActiveLayer() {
   }
 }
 
-// === [수정] 모듈 드래그 앤 드롭 (마우스) ===
+// === 모듈 드래그 앤 드롭 (마우스) ===
 function handleDragStart(layerId, moduleId, moduleIndexInOrder, event) {
     if (event.type === 'mousedown') {
         event.preventDefault(); 
@@ -663,7 +663,7 @@ function handleDrop(targetLayerId, targetModuleIndexInOrder, event) {
   draggedModuleInfo = null;
 }
 
-// === [수정] 모듈 터치 드래그 핸들러 (모바일) ===
+// === 모듈 터치 드래그 핸들러 (모바일) ===
 function handleModuleTouchStart(event, layerId, moduleId, index) {
     event.stopPropagation();
     const layer = layers.find(l => l.id === layerId);
@@ -713,7 +713,7 @@ function handleDocumentTouchEnd(event) {
     document.removeEventListener('touchend', handleDocumentTouchEnd);
 }
 
-// === [수정] 코드 생성 - aspect-ratio에서도 span 유지 ===
+// === 코드 생성 - aspect-ratio에서도 span 유지 ===
 function generateHTML() {
   let html = `<!DOCTYPE html>
 <html lang="ko">
@@ -890,7 +890,7 @@ function generateCSS() {
   return css;
 }
 
-// === [수정] UI 컨트롤 및 이벤트 핸들러 ===
+// === UI 컨트롤 및 이벤트 핸들러 ===
 function init() {
   function addSettingsListener(elementId, eventType, settingKey, valueFn, doSaveState = false, doRender = true) {
     const element = document.getElementById(elementId);
@@ -1037,6 +1037,15 @@ function init() {
       }
     });
   }
+
+  // [신규] Gemini API 키 로컬 스토리지 로드/저장
+  const savedKey = localStorage.getItem('gemini_key');
+  if(savedKey) {
+      document.getElementById('gemini-api-key').value = savedKey;
+  }
+  document.getElementById('gemini-api-key').addEventListener('change', (e) => {
+      localStorage.setItem('gemini_key', e.target.value);
+  });
   
   addLayer(); 
 }
@@ -1246,6 +1255,145 @@ function showToast(message) {
   toast.textContent = message;
   toast.style.display = 'block';
   setTimeout(() => toast.style.display = 'none', 3000);
+}
+
+// ==========================================
+// [신규] Gemini API 연동 기능
+// ==========================================
+
+async function generateLayoutWithGemini() {
+  const apiKey = document.getElementById('gemini-api-key').value;
+  const promptText = document.getElementById('ai-prompt').value;
+  const statusEl = document.getElementById('ai-status');
+
+  if (!apiKey) {
+    alert('Gemini API 키를 입력해주세요.');
+    return;
+  }
+  if (!promptText) {
+    alert('프롬프트를 입력해주세요.');
+    return;
+  }
+
+  statusEl.textContent = 'Gemini가 레이아웃을 구상 중입니다... 🧠';
+  
+  // 현재 설정된 컬럼 수를 참조
+  const currentLayer = getActiveLayer();
+  const maxCols = currentLayer ? currentLayer.settings.desktopColumns : 6;
+
+  // 1. 시스템 프롬프트 (JSON 스키마 정의)
+  const systemInstruction = `
+    You are a professional web layout assistant.
+    Your goal is to generate a JSON object for a grid layout based on the user's request.
+    
+    The Output JSON must follow this exact structure:
+    {
+      "layerName": "Layer Name",
+      "desktopColumns": ${maxCols}, 
+      "desktopGap": 10,
+      "blendMode": "normal",
+      "modules": [
+        {
+          "type": "box" or "image",
+          "col": (integer, 1 to ${maxCols}),
+          "row": (integer, 1 to 10),
+          "color": (hex color string),
+          "transparent": (boolean),
+          "borderColor": (hex color string),
+          "borderWidth": (integer 0-20),
+          "textContent": (string, creative content based on context),
+          "fontSize": (integer),
+          "fontColor": (hex color string),
+          "textAlign": "left" or "center" or "right"
+        }
+      ]
+    }
+
+    Rules:
+    1. Respond ONLY with raw JSON. No markdown, no code blocks.
+    2. 'col' means column span. sum of 'col' in a row doesn't need to match total columns (it uses grid-auto-flow).
+    3. If the user asks for a specific style (e.g., retro, dark), adjust colors/fonts accordingly.
+    4. Make the content realistic (not just "Lorem Ipsum").
+  `;
+
+  // 2. API 호출
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: `User Request: ${promptText}\n\n${systemInstruction}` }]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    
+    if (data.error) throw new Error(data.error.message);
+
+    // 3. 응답 파싱 및 정화
+    let rawText = data.candidates[0].content.parts[0].text;
+    // 마크다운 코드 블록 제거 (```json ... ```)
+    rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    const generatedData = JSON.parse(rawText);
+    applyAiGeneratedLayout(generatedData);
+    
+    statusEl.textContent = '생성 완료! ✨';
+
+  } catch (error) {
+    console.error(error);
+    statusEl.textContent = '에러 발생: ' + error.message;
+  }
+}
+
+// 4. 생성된 데이터를 앱에 적용하는 함수
+function applyAiGeneratedLayout(data) {
+  // 새 레이어 생성 로직 활용
+  const newLayerId = Date.now();
+  
+  // 모듈 데이터에 ID 및 필수값 주입
+  const processedModules = data.modules.map((m, index) => ({
+    ...m,
+    id: newLayerId + index + 1,
+    mobileCol: null,
+    groupId: null,
+    aspectRatio: null,
+    // 기본값 방어 코드
+    fontWeight: '400',
+    verticalAlign: 'flex-start',
+    fontColor: m.fontColor || '#000000',
+    borderColor: m.borderColor || '#000000',
+    borderWidth: m.borderWidth || 0,
+    transparent: m.transparent || false
+  }));
+
+  const moduleIds = processedModules.map(m => m.id);
+
+  const newLayer = {
+    id: newLayerId,
+    name: "✨ " + (data.layerName || "AI Layer"),
+    priority: layers.length > 0 ? Math.max(...layers.map(l => l.priority)) + 1 : 0,
+    isVisible: true,
+    isLocked: false,
+    settings: {
+      desktopColumns: data.desktopColumns || 6,
+      desktopGap: data.desktopGap || 10,
+      targetColumns: 2,
+      mobileGap: 10,
+      mobileOrderLocked: false,
+      blendMode: data.blendMode || 'normal'
+    },
+    modules: processedModules,
+    desktopOrder: [...moduleIds],
+    mobileOrder: [...moduleIds]
+  };
+
+  layers.push(newLayer);
+  activateLayer(newLayer.id);
+  saveState();
+  showToast('AI가 레이아웃을 생성했습니다!');
 }
 
 // --- DOM 로드 후 초기화 ---
